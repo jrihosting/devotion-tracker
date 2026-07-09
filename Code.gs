@@ -51,6 +51,9 @@ function hasConfig() {
 // doGet — Serve web app
 // ──────────────────────────────────────────────
 function doGet() {
+  // Fòse otorizasyon Drive le w ap chaje paj la
+  try { DriveApp.getRootFolder().getName(); } catch (e) { /* pral mande otorizasyon */ }
+
   const template = HtmlService.createTemplateFromFile('Index');
   const output = template.evaluate()
     .setTitle('Devotion Tracker — JRiSpace')

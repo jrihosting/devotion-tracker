@@ -186,7 +186,7 @@
     <p id="permStatus" style="font-size:14px;color:var(--gray-500);margin-bottom:20px;">Verifikasyon...</p>
     <div id="permActions" style="display:none;">
       <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">App la bezwen aksè Drive pou chèche spreadsheet ou yo. Klike bouton an pou otorize.</p>
-      <button class="btn btn-primary" onclick="checkDriveAccess()">✅ Otorize Aksè Drive</button>
+      <button class="btn btn-primary" onclick="authorizeDriveAccess()">✅ Otorize Aksè Drive</button>
     </div>
     <div id="permLoading" style="display:block;">
       <div class="spinner" style="border:4px solid var(--gray-200);border-top-color:var(--mauve);width:40px;height:40px;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div>
@@ -566,6 +566,11 @@ function checkDriveAccess() {
       document.getElementById('permActions').style.display = 'block';
     })
     .checkDrivePermissions();
+}
+
+function authorizeDriveAccess() {
+  // Redireksyon sou URL app la — Google pral mande otorizasyon Drive
+  window.location.reload();
 }
 
 function handleLogout() {
