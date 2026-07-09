@@ -39,6 +39,8 @@
     .login-card h1 { font-size:28px; font-weight:800; background:var(--gradient-header); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:4px; }
     .login-card p { color:var(--gray-500); margin-bottom:32px; font-size:14px; }
     .login-card .logo-icon { font-size:56px; margin-bottom:16px; display:block; }
+    .login-card .setup-link { display:block; margin-top:16px; font-size:13px; color:var(--gray-500); }
+    .login-card .setup-link a { color:var(--mauve); text-decoration:none; font-weight:600; cursor:pointer; }
     .form-group { margin-bottom:18px; text-align:left; }
     .form-group label { display:block; font-size:13px; font-weight:600; color:var(--gray-700); margin-bottom:6px; }
     .form-group input,.form-group select { width:100%; padding:12px 16px; border:2px solid var(--gray-200); border-radius:var(--radius-sm); font-size:15px; transition:var(--transition); outline:none; font-family:var(--font); }
@@ -300,6 +302,7 @@
       <a href="#" onclick="showPage('members',this)"><span>👥</span> Membres</a>
       <a href="#" onclick="showPage('connections',this)"><span>🔌</span> Koneksyon</a>
       <a href="#" onclick="showPage('mappings',this)"><span>🔗</span> Mapping</a>
+      <a href="#" onclick="showPage('users',this)"><span>👤</span> Itilizatè</a>
       <a href="#" onclick="showPage('settings',this)"><span>⚙️</span> Settings</a>
     </nav>
 
@@ -341,6 +344,15 @@
           <button class="btn btn-primary" style="width:auto;" onclick="openAddMappingModal()">+ Ajoute Mapping</button>
         </div>
         <div id="mappingsContent"><div class="loading"><div class="spinner"></div>Chajman...</div></div>
+      </div>
+
+      <!-- USERS -->
+      <div class="page" id="pageUsers">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div><h2>👤 Itilizatè</h2><p>Jere moun ki gen aksè nan app la</p></div>
+          <button class="btn btn-primary" style="width:auto;" onclick="openAddUserModal()">+ Ajoute</button>
+        </div>
+        <div id="usersContent"><div class="loading"><div class="spinner"></div>Chajman...</div></div>
       </div>
 
       <!-- SETTINGS -->
@@ -398,6 +410,14 @@
       <button class="btn btn-outline" onclick="closeModal('connectionModal')">Anile</button>
       <button class="btn btn-primary" style="width:auto;" onclick="handleAddConnection()">Ajoute</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL: USER -->
+<div class="modal-overlay" id="userModal">
+  <div class="modal" style="max-width:500px;">
+    <h3 id="userModalTitle">👤 Ajoute Itilizatè</h3>
+    <div id="userModalBody"></div>
   </div>
 </div>
 
@@ -741,6 +761,7 @@ function initApp() {
   loadMembers();
   loadConnections();
   loadMappings();
+  loadUsers();
   loadSettings();
 }
 
@@ -758,8 +779,9 @@ function showPage(name, el) {
   if (name === 'dashboard') loadDashboard();
   else if (name === 'tracker') loadTracker();
   else if (name === 'members') loadMembers();
-  else if (name === 'connections') loadConnections();
+  else   if (name === 'connections') loadConnections();
   else if (name === 'mappings') loadMappings();
+  else if (name === 'users') loadUsers();
   else if (name === 'settings') loadSettings();
 }
 
@@ -1342,12 +1364,16 @@ function deleteMapping(idx) {
 // ═══════════════════════════════════════════
 function loadSettings() {
   var config = STATE.config;
+  var usersConn = config && config.connections ? config.connections.find(function(c) { return c.role === 'users'; }) : null;
+  var hasUsersSheet = usersConn !== undefined && usersConn !== null;
+
   var html = '<div class="chart-card">';
   html += '<h3>📊 State App</h3>';
   html += '<table style="font-size:14px;">';
   html += '<tr><td style="font-weight:600;width:160px;">Koneksyon:</td><td>' + (config && config.connections ? config.connections.length : 0) + '</td></tr>';
   html += '<tr><td style="font-weight:600;">Mappings:</td><td>' + (config && config.mappings ? config.mappings.length : 0) + '</td></tr>';
-  html += '<tr><td style="font-weight:600;">Total Devotions:</td><td>' + (document.querySelector('.stat-card.mauve .stat-number') ? document.querySelector('.stat-card.mauve .stat-number').textContent : '—') + '</td></tr>';
+  html += '<tr><td style="font-weight:600;">Users Sheet:</td><td>' + (hasUsersSheet ? '✅ ' + usersConn.name : '❌ Pa gen') + '</td></tr>';
+  html += '<tr><td style="font-weight:600;">Super Admin:</td><td>✅ admin@jrispace.com (sekour)</td></tr>';
   html += '</table>';
 
   html += '<div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">';
@@ -1410,6 +1436,133 @@ function handleReSetup() {
   _setupData = { connections: (config && config.connections) ? config.connections.slice() : [], mappings: (config && config.mappings) ? config.mappings.slice() : [] };
   STATE.setupStep = 1;
   nextStep(1);
+}
+
+// ═══════════════════════════════════════════
+// USERS MANAGEMENT
+// ═══════════════════════════════════════════
+function loadUsers() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res.ok && res.needsSetup) {
+        document.getElementById('usersContent').innerHTML = '<p style="text-align:center;padding:40px;color:var(--gray-500);">Pa gen users sheet. Ajoute yon koneksyon ak wòl "users" nan Koneksyon yo.</p>';
+        return;
+      }
+      if (!res.ok) {
+        document.getElementById('usersContent').innerHTML = '<p style="color:var(--rouj);text-align:center;padding:40px;">' + res.error + '</p>';
+        return;
+      }
+      renderUsers(res.headers, res.users);
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById('usersContent').innerHTML = '<p style="color:var(--rouj);text-align:center;padding:40px;">Erè: ' + err.message + '</p>';
+    })
+    .getUsersList(STATE.token);
+}
+
+function renderUsers(headers, users) {
+  var showCols = headers.filter(function(h) {
+    return !h.toUpperCase().startsWith('COLUMN') && !h.includes('Timestamp');
+  });
+
+  var html = '<div class="table-wrap"><table><thead><tr>';
+  showCols.forEach(function(h) { html += '<th>' + h + '</th>'; });
+  html += '<th style="width:100px;">Aksyon</th></tr></thead><tbody>';
+
+  if (users.length === 0) {
+    html += '<tr><td colspan="' + (showCols.length + 1) + '" style="text-align:center;padding:40px;color:var(--gray-500);">Pa gen itilizatè ankò</td></tr>';
+  } else {
+    users.forEach(function(u) {
+      html += '<tr>';
+      showCols.forEach(function(h) { html += '<td>' + (u[h]||'') + '</td>'; });
+      html += '<td><button class="btn btn-sm btn-bleu" onclick="openEditUserModal(' + u._row + ')" style="padding:4px 8px;font-size:11px;">Edit</button> ';
+      html += '<button class="btn btn-sm btn-rouj" onclick="handleDeleteUser(' + u._row + ')" style="padding:4px 8px;font-size:11px;">🗑</button></td>';
+      html += '</tr>';
+    });
+  }
+
+  html += '</tbody></table></div>';
+  html += '<p style="font-size:12px;color:var(--gray-500);margin-top:8px;">' + users.length + ' itilizatè total</p>';
+
+  document.getElementById('usersContent').innerHTML = html;
+}
+
+function openAddUserModal() {
+  var headers = [];
+  // Jwenn headers yo
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res.ok) { toast(res.error, 'error'); return; }
+      var h = res.headers;
+      var html = '';
+      h.forEach(function(col) {
+        var isPin = col.toUpperCase().includes('PIN') || col.toUpperCase().includes('PASSWORD') || col.toUpperCase().includes('KOD');
+        var type = isPin ? 'password' : 'text';
+        html += '<div class="form-group"><label>' + col + '</label><input type="' + type + '" name="' + col + '"></div>';
+      });
+      html += '<div class="modal-actions">';
+      html += '<button class="btn btn-outline" onclick="closeModal(\'userModal\')">Anile</button>';
+      html += '<button class="btn btn-primary" style="width:auto;" onclick="saveUser(null)">💾 Ajoute</button></div>';
+      document.getElementById('userModalBody').innerHTML = html;
+      document.getElementById('userModalTitle').textContent = '➕ Ajoute Itilizatè';
+      document.getElementById('userModal').classList.add('open');
+    })
+    .getUsersList(STATE.token);
+}
+
+function openEditUserModal(rowIndex) {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res.ok) { toast(res.error, 'error'); return; }
+      var user = res.users.find(function(u) { return u._row === rowIndex; });
+      if (!user) { toast('Pa jwenn itilizatè', 'error'); return; }
+
+      var h = res.headers;
+      var html = '';
+      h.forEach(function(col) {
+        var val = user[col] !== undefined && user[col] !== null ? user[col] : '';
+        var isPin = col.toUpperCase().includes('PIN') || col.toUpperCase().includes('PASSWORD') || col.toUpperCase().includes('KOD');
+        var type = isPin ? 'password' : 'text';
+        html += '<div class="form-group"><label>' + col + '</label><input type="' + type + '" name="' + col + '" value="' + val.toString().replace(/"/g,'&quot;') + '"></div>';
+      });
+      html += '<div class="modal-actions">';
+      html += '<button class="btn btn-outline" onclick="closeModal(\'userModal\')">Anile</button>';
+      html += '<button class="btn btn-primary" style="width:auto;" onclick="saveUser(' + rowIndex + ')">💾 Anrejistre</button></div>';
+      document.getElementById('userModalBody').innerHTML = html;
+      document.getElementById('userModalTitle').textContent = '✏️ Modifye Itilizatè';
+      document.getElementById('userModal').classList.add('open');
+    })
+    .getUsersList(STATE.token);
+}
+
+function saveUser(rowIndex) {
+  var form = document.getElementById('userModalBody');
+  var inputs = form.querySelectorAll('input, select');
+  var data = {};
+  inputs.forEach(function(el) { if (el.name) data[el.name] = el.value; });
+
+  var cb = function(res) {
+    if (res.ok) { toast(res.message, 'success'); closeModal('userModal'); loadUsers(); }
+    else { toast(res.error, 'error'); }
+  };
+  var errCb = function(err) { toast('Erè: ' + err.message, 'error'); };
+
+  if (rowIndex) {
+    google.script.run.withSuccessHandler(cb).withFailureHandler(errCb).updateUser(STATE.token, rowIndex, data);
+  } else {
+    google.script.run.withSuccessHandler(cb).withFailureHandler(errCb).addUser(STATE.token, data);
+  }
+}
+
+function handleDeleteUser(rowIndex) {
+  if (!confirm('Èske ou sèten w vle efase itilizatè sa?')) return;
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) { toast(res.message, 'success'); loadUsers(); }
+      else { toast(res.error, 'error'); }
+    })
+    .withFailureHandler(function(err) { toast('Erè: ' + err.message, 'error'); })
+    .deleteUser(STATE.token, rowIndex);
 }
 
 // ═══════════════════════════════════════════

@@ -13,13 +13,15 @@
  */
 
 // ──────────────────────────────────────────────
-// MINIMAL CONFIG — sèlman auth ak default
+// MINIMAL CONFIG — Super admin (sekour), lòt users nan sheet
 // ──────────────────────────────────────────────
 const CONFIG = {
   AUTH: {
-    USERS: {
-      'admin@jrispace.com': '1234',
-      'user@jrispace.com': '5678',
+    SUPER_ADMIN: {
+      email: 'admin@jrispace.com',
+      pin: '1234',
+      role: 'super_admin',
+      name: 'Super Admin',
     },
     PROPERTY_KEY: 'DEVOTION_TRACKER_TOKENS',
   },
@@ -66,15 +68,77 @@ function include(file) {
 // AUTH
 // ──────────────────────────────────────────────
 function authenticate(email, pin) {
-  const user = CONFIG.AUTH.USERS[email.toLowerCase().trim()];
-  if (!user) return { ok: false, error: 'Email pa rekonèt' };
-  if (user !== pin) return { ok: false, error: 'PIN kòd pa bon' };
-  const token = Utilities.getUuid();
-  const props = PropertiesService.getUserProperties();
-  const tokens = JSON.parse(props.getProperty(CONFIG.AUTH.PROPERTY_KEY) || '{}');
-  tokens[token] = { email, loginAt: new Date().toISOString() };
-  props.setProperty(CONFIG.AUTH.PROPERTY_KEY, JSON.stringify(tokens));
-  return { ok: true, token };
+  const cleanEmail = email.toLowerCase().trim();
+
+  // 1. Tcheke super admin anvan
+  const sa = CONFIG.AUTH.SUPER_ADMIN;
+  if (sa && sa.email === cleanEmail && sa.pin === pin) {
+    const token = Utilities.getUuid();
+    const props = PropertiesService.getUserProperties();
+    const tokens = JSON.parse(props.getProperty(CONFIG.AUTH.PROPERTY_KEY) || '{}');
+    tokens[token] = { email: cleanEmail, role: sa.role, name: sa.name, loginAt: new Date().toISOString() };
+    props.setProperty(CONFIG.AUTH.PROPERTY_KEY, JSON.stringify(tokens));
+    return { ok: true, token, user: { email: cleanEmail, role: sa.role, name: sa.name } };
+  }
+
+  // 2. Tcheke nan users sheet si config la egziste
+  const config = getAppConfig();
+  if (config) {
+    const usersConn = _findConnByRole(config, 'users');
+    if (usersConn) {
+      try {
+        const sheet = _openDynamicSheet(usersConn);
+        const headers = _getHeaders(sheet);
+        const rows = _getAllRows(sheet);
+
+        const emailCol = _findColumn(headers, ['EMAIL', 'COURRIEL', 'IMEL']);
+        const pinCol = _findColumn(headers, ['PIN', 'PASSWORD', 'MOTDEPASSE', 'KOD']);
+        const roleCol = _findColumn(headers, ['ROLE', 'WOL']);
+        const nameCol = _findColumn(headers, ['NAME', 'NON', 'PRENOM', 'FULL NAME', 'USERNAME']);
+
+        if (emailCol !== null && pinCol !== null) {
+          for (const row of rows) {
+            const rowEmail = String(row[headers[emailCol]] || '').toLowerCase().trim();
+            const rowPin = String(row[headers[pinCol]] || '').trim();
+            if (rowEmail === cleanEmail) {
+              if (rowPin !== pin) {
+                return { ok: false, error: 'PIN kòd pa bon' };
+              }
+              const token = Utilities.getUuid();
+              const role = roleCol !== null ? (row[headers[roleCol]] || 'user') : 'user';
+              const name = nameCol !== null ? (row[headers[nameCol]] || cleanEmail) : cleanEmail;
+              const props = PropertiesService.getUserProperties();
+              const tokens = JSON.parse(props.getProperty(CONFIG.AUTH.PROPERTY_KEY) || '{}');
+              tokens[token] = { email: cleanEmail, role, name, loginAt: new Date().toISOString() };
+              props.setProperty(CONFIG.AUTH.PROPERTY_KEY, JSON.stringify(tokens));
+              return { ok: true, token, user: { email: cleanEmail, role, name } };
+            }
+          }
+        }
+      } catch (e) {
+        // Si gen erè ak sheet la, kontinye
+      }
+    }
+  }
+
+  return { ok: false, error: 'Email pa rekonèt nan sistèm nan' };
+}
+
+function _findColumn(headers, names) {
+  for (let i = 0; i < headers.length; i++) {
+    const upper = headers[i].toString().toUpperCase().trim();
+    for (const name of names) {
+      if (upper === name) return i;
+    }
+  }
+  // Deuxième passe: partial match
+  for (let i = 0; i < headers.length; i++) {
+    const upper = headers[i].toString().toUpperCase().trim();
+    for (const name of names) {
+      if (upper.includes(name)) return i;
+    }
+  }
+  return null;
 }
 
 function verifyToken(token) {
@@ -574,4 +638,91 @@ function applyMappings(token, data, fromConnName) {
   }
 
   return { ok: true, data: result };
+}
+
+// ──────────────────────────────────────────────
+// USER MANAGEMENT — CRUD depi users sheet
+// ──────────────────────────────────────────────
+function getUsersList(token) {
+  const session = verifyToken(token);
+  if (!session) throw new Error('Unauthorized');
+
+  const config = getAppConfig();
+  if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
+
+  const usersConn = _findConnByRole(config, 'users');
+  if (!usersConn) return { ok: false, error: 'Pa gen users sheet nan konfigirasyon. Ajoute yon koneksyon ak wòl "users".' };
+
+  const sheet = _openDynamicSheet(usersConn);
+  const headers = _getHeaders(sheet);
+  const rows = _getAllRows(sheet);
+
+  return { ok: true, headers, users: rows, connection: usersConn };
+}
+
+function addUser(token, userData) {
+  const session = verifyToken(token);
+  if (!session) throw new Error('Unauthorized');
+  if (session.role !== 'admin' && session.role !== 'super_admin') {
+    return { ok: false, error: 'Se admin sèlman ka ajoute itilizatè' };
+  }
+
+  const config = getAppConfig();
+  const usersConn = _findConnByRole(config, 'users');
+  if (!usersConn) return { ok: false, error: 'Pa gen users sheet' };
+
+  const sheet = _openDynamicSheet(usersConn);
+  const headers = _getHeaders(sheet);
+
+  // Verifye si email la deja egziste
+  const rows = _getAllRows(sheet);
+  const emailCol = headers.find(h =>
+    h.toUpperCase().includes('EMAIL') || h.toUpperCase().includes('COURRIEL') || h.toUpperCase().includes('IMEL')
+  );
+  if (emailCol) {
+    for (const row of rows) {
+      if (String(row[emailCol] || '').toLowerCase().trim() === (userData.email || '').toLowerCase().trim()) {
+        return { ok: false, error: 'Imèl sa deja egziste nan sistèm nan' };
+      }
+    }
+  }
+
+  userData.Timestamp = new Date().toISOString();
+  _appendRow(sheet, userData, headers);
+  return { ok: true, message: 'Itilizatè ajoute avèk siksè!' };
+}
+
+function updateUser(token, rowIndex, userData) {
+  const session = verifyToken(token);
+  if (!session) throw new Error('Unauthorized');
+  if (session.role !== 'admin' && session.role !== 'super_admin') {
+    return { ok: false, error: 'Se admin sèlman ka modifye itilizatè' };
+  }
+
+  const config = getAppConfig();
+  const usersConn = _findConnByRole(config, 'users');
+  if (!usersConn) return { ok: false, error: 'Pa gen users sheet' };
+
+  const sheet = _openDynamicSheet(usersConn);
+  const headers = _getHeaders(sheet);
+
+  userData.Timestamp = new Date().toISOString();
+  _updateRow(sheet, rowIndex, userData, headers);
+  return { ok: true, message: 'Itilizatè mete ajou!' };
+}
+
+function deleteUser(token, rowIndex) {
+  const session = verifyToken(token);
+  if (!session) throw new Error('Unauthorized');
+  if (session.role !== 'admin' && session.role !== 'super_admin') {
+    return { ok: false, error: 'Se admin sèlman ka efase itilizatè' };
+  }
+
+  const config = getAppConfig();
+  const usersConn = _findConnByRole(config, 'users');
+  if (!usersConn) return { ok: false, error: 'Pa gen users sheet' };
+
+  const sheet = _openDynamicSheet(usersConn);
+  sheet.deleteRow(rowIndex);
+  return { ok: true, message: 'Itilizatè efase!' };
 }
