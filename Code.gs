@@ -336,6 +336,36 @@ function _invalidateCacheFor(conn) {
   _cacheRemove(conn);
 }
 
+// ──────────────────────────────────────────────
+// DRIVE SEARCH — chèche spreadsheet nan Drive
+// ──────────────────────────────────────────────
+function searchDriveSheets(token, query) {
+  if (!verifyToken(token)) throw new Error('Unauthorized');
+  if (!query || query.trim().length < 2) return { ok: false, error: 'Antre omwen 2 karaktè' };
+
+  try {
+    const clean = query.trim();
+    // DriveApp.searchFiles limite a 20 rezilta
+    const files = DriveApp.searchFiles(
+      'title contains "' + clean.replace(/"/g, '\\"') + '" and mimeType = "application/vnd.google-apps.spreadsheet"'
+    );
+
+    const results = [];
+    while (files.hasNext() && results.length < 20) {
+      const f = files.next();
+      results.push({
+        id: f.getId(),
+        name: f.getName(),
+        owner: f.getOwner() ? f.getOwner().getEmail() : '',
+      });
+    }
+
+    return { ok: true, files: results };
+  } catch (e) {
+    return { ok: false, error: 'Drive search: ' + e.message };
+  }
+}
+
 function clearCache() {
   try {
     const cache = CacheService.getScriptCache();

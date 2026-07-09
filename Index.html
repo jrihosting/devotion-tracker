@@ -135,6 +135,15 @@
     .lookup-result h4 { font-size:14px; margin-bottom:8px; }
     .lookup-result.found h4 { color:var(--green); }
     .lookup-result.not-found h4 { color:var(--rouj); }
+    .drive-search-results { position:absolute; top:100%; left:0; right:0; background:white; border:1px solid var(--border); border-radius:0 0 12px 12px; max-height:240px; overflow-y:auto; z-index:100; box-shadow:0 8px 24px rgba(0,0,0,.15); display:none; }
+    .drive-search-results.open { display:block; }
+    .drive-search-item { padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; transition:background .15s; }
+    .drive-search-item:last-child { border-bottom:none; }
+    .drive-search-item:hover { background:rgba(139,92,246,0.08); }
+    .drive-search-item .icon { font-size:20px; flex-shrink:0; }
+    .drive-search-item .info { flex:1; min-width:0; }
+    .drive-search-item .name { font-size:14px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .drive-search-item .meta { font-size:11px; color:#9ca3af; }
 
     /* CONNECTION / MAPPING UI */
     .conn-card { background:white; border:2px solid var(--gray-200); border-radius:var(--radius); padding:16px; margin-bottom:12px; transition:var(--transition); }
@@ -213,8 +222,11 @@
         <input type="text" id="s1Name" value="Devotionals" placeholder="eg: Devotionals">
       </div>
       <div class="form-group">
-        <label>Spreadsheet ID</label>
-        <input type="text" id="s1Id" placeholder="ID spreadsheet la (jwenn li nan URL la)">
+        <label>Spreadsheet</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="s1Id" placeholder="—" readonly style="background:var(--gray-100);font-size:12px;flex:1;cursor:default;">
+          <button class="btn btn-sm btn-mauve" onclick="openDriveSheetSelector('s1')" style="white-space:nowrap;">📂 Chwazi Sheet</button>
+        </div>
       </div>
       <div class="form-group">
         <label>Tab (Sheet) Non</label>
@@ -239,8 +251,11 @@
         <input type="text" id="s2Name" value="Members" placeholder="eg: Members">
       </div>
       <div class="form-group">
-        <label>Spreadsheet ID</label>
-        <input type="text" id="s2Id" placeholder="ID spreadsheet la">
+        <label>Spreadsheet</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="s2Id" placeholder="—" readonly style="background:var(--gray-100);font-size:12px;flex:1;cursor:default;">
+          <button class="btn btn-sm btn-bleu" onclick="openDriveSheetSelector('s2')" style="white-space:nowrap;">📂 Chwazi Sheet</button>
+        </div>
       </div>
       <div class="form-group">
         <label>Tab (Sheet) Non</label>
@@ -400,9 +415,14 @@
         <option value="reference">Referans (done siplemantè)</option>
       </select>
     </div>
-    <div class="form-group"><label>Spreadsheet ID</label><input type="text" id="connId" placeholder="ID spreadsheet la"></div>
+    <div class="form-group"><label>Spreadsheet</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="connId" placeholder="—" readonly style="background:var(--gray-100);font-size:12px;flex:1;cursor:default;">
+        <button class="btn btn-sm btn-outline" onclick="openDriveSheetSelector('conn')" style="white-space:nowrap;">📂 Chwazi Sheet</button>
+      </div>
+    </div>
     <div class="form-group"><label>Tab</label>
-      <select id="connTab"><option value="">— Antre ID anvan —</option></select>
+      <select id="connTab"><option value="">— Chwazi dapre ID anvan —</option></select>
     </div>
     <button class="btn btn-sm btn-outline" onclick="loadConnTabs()">🔄 Chaje Tabs</button>
     <div class="lookup-result" id="connPreview" style="margin-top:12px;"></div>
@@ -418,6 +438,24 @@
   <div class="modal" style="max-width:500px;">
     <h3 id="userModalTitle">👤 Ajoute Itilizatè</h3>
     <div id="userModalBody"></div>
+  </div>
+</div>
+
+<!-- MODAL: DRIVE SHEET SEARCH (shared) -->
+<div class="modal-overlay" id="driveSearchModal">
+  <div class="modal" style="max-width:520px;">
+    <h3>📂 Chwazi Spreadsheet nan Drive</h3>
+    <div class="form-group">
+      <label>Tape non sheet la</label>
+      <div style="position:relative;">
+        <input type="text" id="driveSearchInput" placeholder="eg: Devotionals, Members..." oninput="debouncedDriveSearch()" autocomplete="off" style="font-size:16px;padding:12px 16px;">
+        <div id="driveSearchResults" class="drive-search-results"></div>
+      </div>
+    </div>
+    <div id="driveSearchPreview" class="lookup-result" style="margin-top:4px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('driveSearchModal')">Anile</button>
+    </div>
   </div>
 </div>
 
@@ -542,8 +580,8 @@ function prevStep(n) {
 }
 
 function validateStep1() {
-  const id = document.getElementById('s1Id').value.trim();
-  if (!id) { toast('Antre spreadsheet ID a', 'error'); return false; }
+  const id = _getSheetId('s1');
+  if (!id) { toast('Chwazi yon spreadsheet anvan', 'error'); return false; }
   _setupData.connections[0] = {
     name: document.getElementById('s1Name').value.trim() || 'Devotionals',
     role: 'devotion',
@@ -554,8 +592,8 @@ function validateStep1() {
 }
 
 function validateStep2() {
-  const id = document.getElementById('s2Id').value.trim();
-  if (!id) { toast('Antre spreadsheet ID a pou members', 'error'); return false; }
+  const id = _getSheetId('s2');
+  if (!id) { toast('Chwazi yon spreadsheet anvan pou members', 'error'); return false; }
   _setupData.connections[1] = {
     name: document.getElementById('s2Name').value.trim() || 'Members',
     role: 'lookup',
@@ -568,9 +606,8 @@ function validateStep2() {
 }
 
 function loadTabs(prefix) {
-  const idEl = document.getElementById(prefix + 'Id');
+  const id = _getSheetId(prefix);
   const tabEl = document.getElementById(prefix + 'Tab');
-  const id = idEl.value.trim();
   if (!id) { toast('Antre spreadsheet ID anvan', 'error'); return; }
 
   tabEl.innerHTML = '<option>Chajman...</option>';
@@ -595,9 +632,8 @@ function loadTabs(prefix) {
 }
 
 function loadColumns(prefix) {
-  const idEl = document.getElementById(prefix + 'Id');
+  const id = _getSheetId(prefix);
   const tabEl = document.getElementById(prefix + 'Tab');
-  const id = idEl.value.trim();
   const tab = tabEl.value;
   if (!id) { toast('Antre spreadsheet ID anvan', 'error'); return; }
 
@@ -1195,20 +1231,121 @@ function loadConnections() {
   document.getElementById('connectionsContent').innerHTML = html;
 }
 
+// ─────────────────────────────────────────
+// DRIVE SHEET SEARCH (shared — setup + connections)
+// ─────────────────────────────────────────
+var _driveSearchCallback = null;
+
+function openDriveSheetSelector(prefix) {
+  _driveSearchCallback = prefix;
+  document.getElementById('driveSearchInput').value = '';
+  document.getElementById('driveSearchResults').classList.remove('open');
+  document.getElementById('driveSearchResults').innerHTML = '';
+  document.getElementById('driveSearchPreview').className = 'lookup-result';
+  document.getElementById('driveSearchPreview').innerHTML = '';
+  document.getElementById('driveSearchModal').classList.add('open');
+  setTimeout(function() { document.getElementById('driveSearchInput').focus(); }, 200);
+}
+
+var _driveSearchTimer = null;
+
+function debouncedDriveSearch() {
+  if (_driveSearchTimer) clearTimeout(_driveSearchTimer);
+  _driveSearchTimer = setTimeout(function() { doDriveSearch(); }, 350);
+}
+
+function doDriveSearch() {
+  var q = document.getElementById('driveSearchInput').value.trim();
+  var resultsEl = document.getElementById('driveSearchResults');
+  if (q.length < 2) { resultsEl.classList.remove('open'); return; }
+
+  resultsEl.innerHTML = '<div class="drive-search-item" style="cursor:default;"><div class="info"><div class="meta">Chajman...</div></div></div>';
+  resultsEl.classList.add('open');
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res.ok) { resultsEl.innerHTML = '<div class="drive-search-item" style="cursor:default;"><div class="info"><div class="meta">' + res.error + '</div></div></div>'; return; }
+
+      if (res.files.length === 0) {
+        resultsEl.innerHTML = '<div class="drive-search-item" style="cursor:default;"><div class="info"><div class="meta">Pa jwenn sheet ak non "' + q + '"</div></div></div>';
+        return;
+      }
+
+      var html = '';
+      res.files.forEach(function(f) {
+        html += '<div class="drive-search-item" onclick="selectDriveSheet(\'' + f.id + '\', \'' + f.name.replace(/'/g, "\\'") + '\')">';
+        html += '<span class="icon">📊</span>';
+        html += '<div class="info"><div class="name">' + f.name + '</div>';
+        html += '<div class="meta">' + f.id + (f.owner ? ' · ' + f.owner : '') + '</div></div>';
+        html += '</div>';
+      });
+      resultsEl.innerHTML = html;
+      document.getElementById('driveSearchPreview').className = 'lookup-result';
+      document.getElementById('driveSearchPreview').innerHTML = '';
+    })
+    .withFailureHandler(function(err) {
+      resultsEl.innerHTML = '<div class="drive-search-item" style="cursor:default;"><div class="info"><div class="meta">Erè: ' + err.message + '</div></div></div>';
+    })
+    .searchDriveSheets(STATE.token, q);
+}
+
+function selectDriveSheet(id, name) {
+  document.getElementById('driveSearchResults').classList.remove('open');
+  closeModal('driveSearchModal');
+
+  var prefix = _driveSearchCallback;
+  var idEl = document.getElementById(prefix + 'Id');
+  if (idEl) {
+    idEl.value = name + '  (' + id + ')';
+    idEl.title = id;
+    idEl.dataset.id = id;
+  }
+
+  // Chaje tabs otomatikman
+  if (prefix === 's1' || prefix === 's2') {
+    loadTabs(prefix);
+  } else if (prefix === 'conn') {
+    document.getElementById('connId').value = name + '  (' + id + ')';
+    document.getElementById('connId').title = id;
+    document.getElementById('connId').dataset.id = id;
+    loadConnTabs();
+  }
+}
+
+// Helper pou jwenn ID a kèlkeswa kote li ye (field oswa dataset)
+function _getSheetId(prefix) {
+  var el = document.getElementById(prefix + 'Id');
+  if (!el) return '';
+  if (el.dataset && el.dataset.id) return el.dataset.id;
+  // Fòma: "Name (ID)" — extrai ID a
+  var m = el.value.match(/\(([^)]+)\)/);
+  return m ? m[1] : el.value.trim();
+}
+
+// Fèmen rezilta yo si klike deyò
+document.addEventListener('click', function(e) {
+  var results = document.getElementById('driveSearchResults');
+  var search = document.getElementById('driveSearchInput');
+  if (results && search && !search.contains(e.target) && !results.contains(e.target)) {
+    results.classList.remove('open');
+  }
+});
+
 function openAddConnectionModal() {
   document.getElementById('connName').value = '';
   document.getElementById('connRole').value = 'lookup';
   document.getElementById('connId').value = '';
-  document.getElementById('connTab').innerHTML = '<option value="">— Antre ID anvan —</option>';
+  document.getElementById('connId').title = '';
+  if (document.getElementById('connId').dataset) document.getElementById('connId').dataset.id = '';
+  document.getElementById('connTab').innerHTML = '<option value="">— Chwazi dapre ID anvan —</option>';
   document.getElementById('connPreview').className = 'lookup-result';
   document.getElementById('connPreview').innerHTML = '';
   document.getElementById('connectionModal').classList.add('open');
 }
 
 function loadConnTabs() {
-  var id = document.getElementById('connId').value.trim();
+  var id = _getSheetId('conn');
   var tabEl = document.getElementById('connTab');
-  var preview = document.getElementById('connPreview');
   if (!id) { toast('Antre spreadsheet ID anvan', 'error'); return; }
 
   tabEl.innerHTML = '<option>Chajman...</option>';
@@ -1230,7 +1367,7 @@ function loadConnTabs() {
 function handleAddConnection() {
   var name = document.getElementById('connName').value.trim();
   var role = document.getElementById('connRole').value;
-  var id = document.getElementById('connId').value.trim();
+  var id = _getSheetId('conn');
   var tab = document.getElementById('connTab').value;
 
   if (!name || !id) { toast('Ranpli non ak ID spreadsheet', 'error'); return; }
@@ -1410,24 +1547,26 @@ function handleReSetup() {
   if (config && config.connections) {
     if (config.connections[0]) {
       document.getElementById('s1Name').value = config.connections[0].name || 'Devotionals';
-      document.getElementById('s1Id').value = config.connections[0].spreadsheetId || '';
-      if (config.connections[0].sheetTab) {
+      var c0 = config.connections[0];
+      document.getElementById('s1Id').value = c0.spreadsheetId ? c0.name + '  (' + c0.spreadsheetId + ')' : '';
+      if (c0.sheetTab) {
         setTimeout(function() {
           loadTabs('s1');
           setTimeout(function() {
-            document.getElementById('s1Tab').value = config.connections[0].sheetTab;
+            document.getElementById('s1Tab').value = c0.sheetTab;
           }, 1000);
         }, 100);
       }
     }
     if (config.connections[1]) {
       document.getElementById('s2Name').value = config.connections[1].name || 'Members';
-      document.getElementById('s2Id').value = config.connections[1].spreadsheetId || '';
-      if (config.connections[1].sheetTab) {
+      var c1 = config.connections[1];
+      document.getElementById('s2Id').value = c1.spreadsheetId ? c1.name + '  (' + c1.spreadsheetId + ')' : '';
+      if (c1.sheetTab) {
         setTimeout(function() {
           loadTabs('s2');
           setTimeout(function() {
-            document.getElementById('s2Tab').value = config.connections[1].sheetTab;
+            document.getElementById('s2Tab').value = c1.sheetTab;
           }, 1000);
         }, 100);
       }
