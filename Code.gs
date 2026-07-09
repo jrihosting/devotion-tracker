@@ -377,6 +377,18 @@ function clearCache() {
 }
 
 // ──────────────────────────────────────────────
+// CHECK PERMISSIONS — fòse otorizasyon Drive
+// ──────────────────────────────────────────────
+function checkDrivePermissions() {
+  try {
+    DriveApp.getRootFolder();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, needsAuth: true, error: e.message };
+  }
+}
+
+// ──────────────────────────────────────────────
 // GET CONNECTION BY ROLE — chèche koneksyon pa wòl
 // ──────────────────────────────────────────────
 function _findConnByRole(config, role) {

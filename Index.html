@@ -178,6 +178,22 @@
 </head>
 <body>
 
+<!-- PERMISSION CHECK PAGE -->
+<div class="login-container" id="permPage" style="display:none;">
+  <div class="login-card" style="text-align:center;">
+    <div style="font-size:48px;margin-bottom:16px;">🔐</div>
+    <h2 style="color:var(--mauve);margin-bottom:8px;">Pèmisyon Drive</h2>
+    <p id="permStatus" style="font-size:14px;color:var(--gray-500);margin-bottom:20px;">Verifikasyon...</p>
+    <div id="permActions" style="display:none;">
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">App la bezwen aksè Drive pou chèche spreadsheet ou yo. Klike bouton an pou otorize.</p>
+      <button class="btn btn-primary" onclick="checkDriveAccess()">✅ Otorize Aksè Drive</button>
+    </div>
+    <div id="permLoading" style="display:block;">
+      <div class="spinner" style="border:4px solid var(--gray-200);border-top-color:var(--mauve);width:40px;height:40px;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════ LOGIN ══════════ -->
 <div class="login-container" id="loginPage">
   <div class="login-card">
@@ -513,7 +529,9 @@ function handleLogin() {
         STATE.userEmail = email;
         document.getElementById('userBadge').textContent = email;
         document.getElementById('loginPage').style.display = 'none';
-        checkConfig();
+        document.getElementById('permPage').style.display = 'flex';
+        document.getElementById('permStatus').textContent = 'Verifikasyon pemisyon...';
+        checkDriveAccess();
       } else {
         errEl.textContent = res.error;
         errEl.style.display = 'block';
@@ -526,12 +544,37 @@ function handleLogin() {
     .authenticate(email, pin);
 }
 
+function checkDriveAccess() {
+  document.getElementById('permLoading').style.display = 'block';
+  document.getElementById('permActions').style.display = 'none';
+  document.getElementById('permStatus').textContent = 'Verifikasyon pemisyon Drive...';
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      document.getElementById('permLoading').style.display = 'none';
+      if (res.ok) {
+        document.getElementById('permPage').style.display = 'none';
+        checkConfig();
+      } else {
+        document.getElementById('permStatus').textContent = '❌ Pemisyon Drive manke';
+        document.getElementById('permActions').style.display = 'block';
+      }
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById('permLoading').style.display = 'none';
+      document.getElementById('permStatus').textContent = '❌ Pemisyon Drive manke';
+      document.getElementById('permActions').style.display = 'block';
+    })
+    .checkDrivePermissions();
+}
+
 function handleLogout() {
   google.script.run
     .withSuccessHandler(function() {
       STATE.token = null; STATE.config = null;
       document.getElementById('appContainer').style.display = 'none';
       document.getElementById('setupPage').style.display = 'none';
+      document.getElementById('permPage').style.display = 'none';
       document.getElementById('loginPage').style.display = 'flex';
       document.getElementById('loginEmail').value = '';
       document.getElementById('loginPin').value = '';
