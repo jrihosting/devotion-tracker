@@ -87,9 +87,8 @@ function authenticate(email, pin) {
     const usersConn = _findConnByRole(config, 'users');
     if (usersConn) {
       try {
-        const sheet = _openDynamicSheet(usersConn);
-        const headers = _getHeaders(sheet);
-        const rows = _getAllRows(sheet);
+        const headers = _getCachedHeaders(usersConn);
+        const rows = _getCachedRows(usersConn);
 
         const emailCol = _findColumn(headers, ['EMAIL', 'COURRIEL', 'IMEL']);
         const pinCol = _findColumn(headers, ['PIN', 'PASSWORD', 'MOTDEPASSE', 'KOD']);
@@ -227,6 +226,42 @@ function resetConfig(token) {
 }
 
 // ──────────────────────────────────────────────
+// CACHE LAYER — CacheService pou akselere
+// ──────────────────────────────────────────────
+const CACHE_TTL = 30; // segond
+
+function _cacheKey(conn, kind) {
+  return `dt_${conn.spreadsheetId}_${conn.sheetTab || '_default'}_${kind}`;
+}
+
+function _cacheGet(key) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const raw = cache.get(key);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* ignore cache errors */ }
+  return null;
+}
+
+function _cachePut(key, data, ttl) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const json = JSON.stringify(data);
+    if (json.length < 95000) { // CacheService limit ~100KB
+      cache.put(key, json, ttl || CACHE_TTL);
+    }
+  } catch (e) { /* ignore cache errors */ }
+}
+
+function _cacheRemove(conn) {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.remove(_cacheKey(conn, 'headers'));
+    cache.remove(_cacheKey(conn, 'rows'));
+  } catch (e) { /* ignore */ }
+}
+
+// ──────────────────────────────────────────────
 // DYNAMIC SHEET HELPERS — baze sou config
 // ──────────────────────────────────────────────
 function _openDynamicSheet(conn) {
@@ -234,6 +269,40 @@ function _openDynamicSheet(conn) {
   return conn.sheetTab ? ss.getSheetByName(conn.sheetTab) : ss.getSheets()[0];
 }
 
+function _getCachedHeaders(conn) {
+  const key = _cacheKey(conn, 'headers');
+  let cached = _cacheGet(key);
+  if (cached) return cached;
+  const sheet = _openDynamicSheet(conn);
+  const maxCols = sheet.getLastColumn();
+  cached = maxCols === 0 ? [] : sheet.getRange(1, 1, 1, maxCols).getValues()[0];
+  _cachePut(key, cached);
+  return cached;
+}
+
+function _getCachedRows(conn) {
+  const key = _cacheKey(conn, 'rows');
+  let cached = _cacheGet(key);
+  if (cached) return cached;
+
+  const sheet = _openDynamicSheet(conn);
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2) return [];
+
+  const headers = lastCol === 0 ? [] : sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  const rows = data.map((row, idx) => {
+    const obj = { _row: idx + 2 };
+    headers.forEach((h, i) => { obj[h] = row[i]; });
+    return obj;
+  });
+
+  _cachePut(key, rows);
+  return rows;
+}
+
+// Ankò pou retro-konpatibilite
 function _getHeaders(sheet) {
   const maxCols = sheet.getLastColumn();
   if (maxCols === 0) return [];
@@ -263,6 +332,20 @@ function _updateRow(sheet, rowIndex, data, headers) {
   sheet.getRange(rowIndex, 1, 1, values.length).setValues([values]);
 }
 
+function _invalidateCacheFor(conn) {
+  _cacheRemove(conn);
+}
+
+function clearCache() {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.removeAll();
+    return { ok: true, message: 'Cache netwaye!' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 // ──────────────────────────────────────────────
 // GET CONNECTION BY ROLE — chèche koneksyon pa wòl
 // ──────────────────────────────────────────────
@@ -287,9 +370,8 @@ function getTrackerData(token) {
   const devotionConn = _findConnByRole(config, 'devotion');
   if (!devotionConn) return { ok: false, error: 'Pa gen koneksyon devotion nan config', needsSetup: true };
 
-  const sheet = _openDynamicSheet(devotionConn);
-  const headers = _getHeaders(sheet);
-  const rows = _getAllRows(sheet);
+  const headers = _getCachedHeaders(devotionConn);
+  const rows = _getCachedRows(devotionConn);
 
   const colMap = {};
   headers.forEach((h, i) => { colMap[h.trim().toUpperCase()] = i; });
@@ -330,6 +412,7 @@ function addDevotion(token, entry) {
   }
 
   _appendRow(sheet, entry, headers);
+  _invalidateCacheFor(devotionConn);
   return { ok: true, message: 'Devotion anrejistre avèk siksè!' };
 }
 
@@ -346,6 +429,7 @@ function updateDevotion(token, rowIndex, entry) {
   const headers = _getHeaders(sheet);
   entry.Timestamp = new Date().toISOString();
   _updateRow(sheet, rowIndex, entry, headers);
+  _invalidateCacheFor(devotionConn);
   return { ok: true, message: 'Devotion mete ajou!' };
 }
 
@@ -357,6 +441,7 @@ function deleteDevotion(token, rowIndex) {
 
   const sheet = _openDynamicSheet(devotionConn);
   sheet.deleteRow(rowIndex);
+  _invalidateCacheFor(devotionConn);
   return { ok: true, message: 'Devotion efase!' };
 }
 
@@ -379,9 +464,8 @@ function lookupByPhone(token, phone) {
 
   for (const conn of (config.connections || [])) {
     if (conn.role === 'devotion') continue; // Sote sheet devotion prensipal la
-    const sheet = _openDynamicSheet(conn);
-    const headers = _getHeaders(sheet);
-    const rows = _getAllRows(sheet);
+    const headers = _getCachedHeaders(conn);
+    const rows = _getCachedRows(conn);
 
     const phoneCols = [];
     headers.forEach((h, i) => {
@@ -476,9 +560,8 @@ function getDashboardStats(token) {
   const devotionConn = _findConnByRole(config, 'devotion');
   if (!devotionConn) return { ok: false, error: 'Pa gen koneksyon devotion', needsSetup: true };
 
-  const sheet = _openDynamicSheet(devotionConn);
-  const rows = _getAllRows(sheet);
-  const headers = _getHeaders(sheet);
+  const headers = _getCachedHeaders(devotionConn);
+  const rows = _getCachedRows(devotionConn);
 
   const totalDevotions = rows.length;
 
@@ -585,9 +668,8 @@ function getMembersList(token) {
   for (const conn of (config.connections || [])) {
     if (conn.role === 'devotion') continue;
     try {
-      const sheet = _openDynamicSheet(conn);
-      const headers = _getHeaders(sheet);
-      const rows = _getAllRows(sheet);
+      const headers = _getCachedHeaders(conn);
+      const rows = _getCachedRows(conn);
 
       const nameCol = headers.find(h =>
         h.toUpperCase().includes('FULL NAME') || h.toUpperCase().includes('_COMPUTED') ||
@@ -653,9 +735,8 @@ function getUsersList(token) {
   const usersConn = _findConnByRole(config, 'users');
   if (!usersConn) return { ok: false, error: 'Pa gen users sheet nan konfigirasyon. Ajoute yon koneksyon ak wòl "users".' };
 
-  const sheet = _openDynamicSheet(usersConn);
-  const headers = _getHeaders(sheet);
-  const rows = _getAllRows(sheet);
+  const headers = _getCachedHeaders(usersConn);
+  const rows = _getCachedRows(usersConn);
 
   return { ok: true, headers, users: rows, connection: usersConn };
 }
@@ -675,7 +756,7 @@ function addUser(token, userData) {
   const headers = _getHeaders(sheet);
 
   // Verifye si email la deja egziste
-  const rows = _getAllRows(sheet);
+  const rows = _getCachedRows(usersConn);
   const emailCol = headers.find(h =>
     h.toUpperCase().includes('EMAIL') || h.toUpperCase().includes('COURRIEL') || h.toUpperCase().includes('IMEL')
   );
@@ -689,6 +770,7 @@ function addUser(token, userData) {
 
   userData.Timestamp = new Date().toISOString();
   _appendRow(sheet, userData, headers);
+  _invalidateCacheFor(usersConn);
   return { ok: true, message: 'Itilizatè ajoute avèk siksè!' };
 }
 
@@ -708,6 +790,7 @@ function updateUser(token, rowIndex, userData) {
 
   userData.Timestamp = new Date().toISOString();
   _updateRow(sheet, rowIndex, userData, headers);
+  _invalidateCacheFor(usersConn);
   return { ok: true, message: 'Itilizatè mete ajou!' };
 }
 
@@ -724,5 +807,6 @@ function deleteUser(token, rowIndex) {
 
   const sheet = _openDynamicSheet(usersConn);
   sheet.deleteRow(rowIndex);
+  _invalidateCacheFor(usersConn);
   return { ok: true, message: 'Itilizatè efase!' };
 }
