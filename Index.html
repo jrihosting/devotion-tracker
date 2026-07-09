@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="ht">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Devotion Tracker — JRiSpace</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    /* ═══════════════════════════════════════════
+       DEVOTION TRACKER — Sylvenson Richard | JRiSpace
+       Theme: Gradient mauve · blan · ble · rouj · light green
+       ═══════════════════════════════════════════ */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --mauve: #8B5CF6; --mauve-light: #A78BFA; --mauve-dark: #7C3AED;
+      --bleu: #3B82F6; --bleu-light: #60A5FA;
+      --rouj: #EF4444; --rouj-light: #F87171;
+      --green: #22C55E; --green-light: #4ADE80;
+      --blanc: #FFFFFF; --gray-50: #FAFAFA; --gray-100: #F4F4F5;
+      --gray-200: #E4E4E7; --gray-300: #D4D4D8; --gray-500: #71717A;
+      --gray-700: #3F3F46; --gray-900: #18181B;
+      --radius: 12px; --radius-sm: 8px;
+      --shadow: 0 4px 24px rgba(139,92,246,0.15);
+      --shadow-lg: 0 8px 40px rgba(139,92,246,0.20);
+      --gradient-main: linear-gradient(135deg,#8B5CF6 0%,#3B82F6 50%,#22C55E 100%);
+      --gradient-header: linear-gradient(135deg,#7C3AED 0%,#3B82F6 100%);
+      --gradient-mauve: linear-gradient(135deg,#8B5CF6,#A78BFA);
+      --gradient-rouj: linear-gradient(135deg,#EF4444,#F87171);
+      --gradient-green: linear-gradient(135deg,#22C55E,#4ADE80);
+      --gradient-bleu: linear-gradient(135deg,#3B82F6,#60A5FA);
+      --font: 'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;
+      --transition: 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    body { font-family: var(--font); background: var(--gradient-main); min-height: 100vh; color: var(--gray-900); }
+
+    /* LOGIN */
+    .login-container { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; background:var(--gradient-main); }
+    .login-card { background:rgba(255,255,255,0.95); backdrop-filter:blur(20px); padding:48px 40px; border-radius:var(--radius); box-shadow:var(--shadow-lg); width:100%; max-width:420px; text-align:center; }
+    .login-card h1 { font-size:28px; font-weight:800; background:var(--gradient-header); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:4px; }
+    .login-card p { color:var(--gray-500); margin-bottom:32px; font-size:14px; }
+    .login-card .logo-icon { font-size:56px; margin-bottom:16px; display:block; }
+    .form-group { margin-bottom:18px; text-align:left; }
+    .form-group label { display:block; font-size:13px; font-weight:600; color:var(--gray-700); margin-bottom:6px; }
+    .form-group input,.form-group select { width:100%; padding:12px 16px; border:2px solid var(--gray-200); border-radius:var(--radius-sm); font-size:15px; transition:var(--transition); outline:none; font-family:var(--font); }
+    .form-group input:focus,.form-group select:focus { border-color:var(--mauve); box-shadow:0 0 0 3px rgba(139,92,246,0.15); }
+
+    .btn { padding:12px 24px; border:none; border-radius:var(--radius-sm); font-size:15px; font-weight:600; cursor:pointer; transition:var(--transition); font-family:var(--font); display:inline-flex; align-items:center; gap:8px; }
+    .btn-primary { background:var(--gradient-header); color:white; width:100%; justify-content:center; }
+    .btn-primary:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(124,58,237,0.35); }
+    .btn-sm { padding:8px 14px; font-size:13px; }
+    .btn-bleu { background:var(--gradient-bleu); color:white; }
+    .btn-rouj { background:var(--gradient-rouj); color:white; }
+    .btn-green { background:var(--gradient-green); color:white; }
+    .btn-mauve { background:var(--gradient-mauve); color:white; }
+    .btn-outline { background:transparent; border:2px solid var(--gray-200); color:var(--gray-700); }
+    .btn-outline:hover { border-color:var(--mauve); color:var(--mauve); }
+    .error-msg { color:var(--rouj); font-size:13px; margin-top:8px; display:none; }
+    .success-msg { color:var(--green); font-size:13px; margin-top:8px; display:none; }
+
+    /* SETUP WIZARD */
+    .setup-container { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; background:var(--gradient-main); }
+    .setup-card { background:rgba(255,255,255,0.95); backdrop-filter:blur(20px); padding:40px; border-radius:var(--radius); box-shadow:var(--shadow-lg); width:100%; max-width:720px; max-height:90vh; overflow-y:auto; }
+    .setup-card h1 { font-size:24px; font-weight:800; background:var(--gradient-header); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:4px; }
+    .setup-card p { color:var(--gray-500); font-size:13px; margin-bottom:20px; }
+    .step-indicator { display:flex; gap:8px; margin-bottom:24px; }
+    .step-dot { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; border:2px solid var(--gray-200); color:var(--gray-500); }
+    .step-dot.active { background:var(--mauve); color:white; border-color:var(--mauve); }
+    .step-dot.done { background:var(--green); color:white; border-color:var(--green); }
+    .step-line { flex:1; height:2px; background:var(--gray-200); align-self:center; }
+    .step-line.done { background:var(--green); }
+
+    /* APP LAYOUT */
+    .app-container { display:none; min-height:100vh; }
+    .app-header { background:var(--gradient-header); color:white; padding:0 24px; height:64px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 16px rgba(124,58,237,0.25); position:sticky; top:0; z-index:100; }
+    .app-header .brand { display:flex; align-items:center; gap:10px; font-size:20px; font-weight:700; }
+    .app-header .brand span { font-size:28px; }
+    .header-right { display:flex; align-items:center; gap:12px; }
+    .header-right .user-badge { background:rgba(255,255,255,0.2); padding:6px 14px; border-radius:20px; font-size:13px; font-weight:500; }
+    .app-body { display:flex; min-height:calc(100vh - 64px); }
+    .sidebar { width:220px; background:white; padding:16px 0; box-shadow:2px 0 16px rgba(0,0,0,0.05); flex-shrink:0; }
+    .sidebar a { display:flex; align-items:center; gap:10px; padding:12px 20px; text-decoration:none; color:var(--gray-700); font-size:14px; font-weight:500; transition:var(--transition); border-left:3px solid transparent; }
+    .sidebar a:hover { background:var(--gray-50); color:var(--mauve); }
+    .sidebar a.active { background:linear-gradient(90deg,rgba(139,92,246,0.1),transparent); color:var(--mauve-dark); border-left-color:var(--mauve); font-weight:600; }
+    .sidebar a span { font-size:20px; }
+    .main-content { flex:1; padding:24px; overflow-y:auto; background:var(--gray-50); }
+    .page { display:none; }
+    .page.active { display:block; }
+    .page-header { margin-bottom:24px; }
+    .page-header h2 { font-size:24px; font-weight:800; background:var(--gradient-header); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .page-header p { color:var(--gray-500); font-size:14px; margin-top:4px; }
+
+    /* CARDS */
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:24px; }
+    .stat-card { background:white; padding:20px; border-radius:var(--radius); box-shadow:var(--shadow); border-top:4px solid; }
+    .stat-card .stat-number { font-size:32px; font-weight:800; margin-top:8px; }
+    .stat-card .stat-label { font-size:13px; color:var(--gray-500); font-weight:500; }
+    .stat-card.mauve { border-color:var(--mauve); } .stat-card.mauve .stat-number { color:var(--mauve); }
+    .stat-card.bleu { border-color:var(--bleu); } .stat-card.bleu .stat-number { color:var(--bleu); }
+    .stat-card.green { border-color:var(--green); } .stat-card.green .stat-number { color:var(--green); }
+    .stat-card.rouj { border-color:var(--rouj); } .stat-card.rouj .stat-number { color:var(--rouj); }
+    .charts-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:16px; }
+    .chart-card { background:white; padding:20px; border-radius:var(--radius); box-shadow:var(--shadow); }
+    .chart-card h3 { font-size:15px; color:var(--gray-700); margin-bottom:16px; font-weight:600; }
+    .chart-card canvas { max-height:280px; }
+
+    /* TABLE */
+    .table-toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+    .table-toolbar input[type=search] { flex:1; min-width:200px; padding:10px 14px; border:2px solid var(--gray-200); border-radius:var(--radius-sm); font-size:14px; outline:none; font-family:var(--font); }
+    .table-toolbar input[type=search]:focus { border-color:var(--mauve); box-shadow:0 0 0 3px rgba(139,92,246,0.1); }
+    .table-wrap { overflow-x:auto; background:white; border-radius:var(--radius); box-shadow:var(--shadow); }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    table thead { background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(59,130,246,0.08)); }
+    table th { padding:12px 14px; text-align:left; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--gray-500); white-space:nowrap; cursor:pointer; user-select:none; }
+    table th:hover { color:var(--mauve); }
+    table td { padding:10px 14px; border-bottom:1px solid var(--gray-100); max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    table tr:hover td { background:rgba(139,92,246,0.03); }
+    .pagination { display:flex; gap:6px; justify-content:center; align-items:center; padding:16px; }
+    .pagination button { padding:6px 12px; border:1px solid var(--gray-200); border-radius:6px; background:white; cursor:pointer; font-size:13px; transition:var(--transition); }
+    .pagination button:hover { border-color:var(--mauve); color:var(--mauve); }
+    .pagination button.active { background:var(--mauve); color:white; border-color:var(--mauve); }
+    .pagination button:disabled { opacity:0.4; cursor:default; }
+
+    /* MODAL */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:200; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:white; border-radius:var(--radius); padding:32px; width:100%; max-width:600px; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow-lg); animation:slideUp 0.25s ease; }
+    @keyframes slideUp { from {opacity:0;transform:translateY(20px)} to {opacity:1;transform:translateY(0)} }
+    .modal h3 { font-size:20px; font-weight:700; background:var(--gradient-header); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:20px; }
+    .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:24px; }
+    .lookup-result { display:none; padding:16px; border-radius:var(--radius-sm); margin-top:12px; max-height:300px; overflow-y:auto; }
+    .lookup-result.found { display:block; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); }
+    .lookup-result.not-found { display:block; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); }
+    .lookup-result h4 { font-size:14px; margin-bottom:8px; }
+    .lookup-result.found h4 { color:var(--green); }
+    .lookup-result.not-found h4 { color:var(--rouj); }
+
+    /* CONNECTION / MAPPING UI */
+    .conn-card { background:white; border:2px solid var(--gray-200); border-radius:var(--radius); padding:16px; margin-bottom:12px; transition:var(--transition); }
+    .conn-card:hover { border-color:var(--mauve-light); }
+    .conn-card .conn-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+    .conn-card .conn-name { font-weight:600; font-size:15px; }
+    .conn-card .conn-role { font-size:12px; padding:2px 10px; border-radius:10px; background:rgba(139,92,246,0.1); color:var(--mauve); font-weight:500; }
+    .conn-card .conn-meta { font-size:12px; color:var(--gray-500); font-family:monospace; }
+    .mapping-row { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; padding:8px; margin-bottom:6px; background:var(--gray-50); border-radius:6px; }
+    .mapping-row .arrow { color:var(--mauve); font-weight:700; font-size:18px; text-align:center; }
+    .mapping-row select { padding:6px 10px; border:1px solid var(--gray-200); border-radius:6px; font-size:12px; outline:none; }
+
+    .loading { display:flex; align-items:center; justify-content:center; padding:60px; color:var(--gray-500); }
+    .spinner { width:32px; height:32px; border:3px solid var(--gray-200); border-top-color:var(--mauve); border-radius:50%; animation:spin 0.6s linear infinite; margin-right:12px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    @media (max-width:768px) {
+      .sidebar { position:fixed; left:-240px; top:64px; bottom:0; z-index:90; transition:var(--transition); }
+      .sidebar.open { left:0; }
+      .sidebar-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3); z-index:89; }
+      .sidebar-backdrop.open { display:block; }
+      .charts-grid { grid-template-columns:1fr; }
+      .stats-grid { grid-template-columns:repeat(2,1fr); }
+    }
+    @media (max-width:480px) {
+      .stats-grid { grid-template-columns:1fr; }
+      .login-card,.setup-card { padding:24px; }
+      .main-content { padding:16px; }
+      .modal { padding:20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════ LOGIN ══════════ -->
+<div class="login-container" id="loginPage">
+  <div class="login-card">
+    <span class="logo-icon">🙏</span>
+    <h1>Devotion Tracker</h1>
+    <p>JRiSpace — Sylvenson Richard</p>
+    <div class="form-group">
+      <label>Imèl</label>
+      <input type="email" id="loginEmail" placeholder="antre imèl ou...">
+    </div>
+    <div class="form-group">
+      <label>PIN Kòd</label>
+      <input type="password" id="loginPin" placeholder="antre PIN ou...">
+    </div>
+    <button class="btn btn-primary" onclick="handleLogin()">Konekte</button>
+    <div class="error-msg" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ══════════ SETUP WIZARD ══════════ -->
+<div class="setup-container" id="setupPage" style="display:none;">
+  <div class="setup-card">
+    <h1>⚙️ Konfigirasyon App la</h1>
+    <p>Konekte spreadsheet ou yo epi defini ki jan yo mache ansanm</p>
+
+    <div class="step-indicator" id="stepIndicator">
+      <div class="step-dot active" id="step1Dot">1</div>
+      <div class="step-line" id="step1Line"></div>
+      <div class="step-dot" id="step2Dot">2</div>
+      <div class="step-line" id="step2Line"></div>
+      <div class="step-dot" id="step3Dot">3</div>
+      <div class="step-line" id="step3Line"></div>
+      <div class="step-dot" id="step4Dot">4</div>
+    </div>
+
+    <!-- Step 1: Devotion Sheet -->
+    <div class="setup-step" id="step1">
+      <h3 style="color:var(--mauve);margin-bottom:12px;">📋 Sheet 1 — Devotion</h3>
+      <p style="font-size:13px;margin-bottom:16px;">Spreadsheet kote devotions yo anrejistre</p>
+      <div class="form-group">
+        <label>Non Koneksyon</label>
+        <input type="text" id="s1Name" value="Devotionals" placeholder="eg: Devotionals">
+      </div>
+      <div class="form-group">
+        <label>Spreadsheet ID</label>
+        <input type="text" id="s1Id" placeholder="ID spreadsheet la (jwenn li nan URL la)">
+      </div>
+      <div class="form-group">
+        <label>Tab (Sheet) Non</label>
+        <select id="s1Tab"><option value="">— Chwazi dapre ID anvan —</option></select>
+      </div>
+      <div class="form-group" style="display:flex;gap:12px;">
+        <button class="btn btn-sm btn-outline" onclick="loadTabs('s1')">🔄 Chaje Tabs</button>
+        <button class="btn btn-sm btn-mauve" onclick="loadColumns('s1')">📊 Wè Kolòn</button>
+      </div>
+      <div id="s1Columns" style="font-size:12px;color:var(--gray-500);margin-bottom:12px;"></div>
+      <div style="display:flex;justify-content:flex-end;">
+        <button class="btn btn-primary" style="width:auto;" onclick="nextStep(2)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Members/Lookup Sheet -->
+    <div class="setup-step" id="step2" style="display:none;">
+      <h3 style="color:var(--bleu);margin-bottom:12px;">👥 Sheet 2 — Members / Lookup</h3>
+      <p style="font-size:13px;margin-bottom:16px;">Spreadsheet kote done manm yo ye (pou phone lookup)</p>
+      <div class="form-group">
+        <label>Non Koneksyon</label>
+        <input type="text" id="s2Name" value="Members" placeholder="eg: Members">
+      </div>
+      <div class="form-group">
+        <label>Spreadsheet ID</label>
+        <input type="text" id="s2Id" placeholder="ID spreadsheet la">
+      </div>
+      <div class="form-group">
+        <label>Tab (Sheet) Non</label>
+        <select id="s2Tab"><option value="">— Chwazi dapre ID anvan —</option></select>
+      </div>
+      <div class="form-group" style="display:flex;gap:12px;">
+        <button class="btn btn-sm btn-outline" onclick="loadTabs('s2')">🔄 Chaje Tabs</button>
+        <button class="btn btn-sm btn-bleu" onclick="loadColumns('s2')">📊 Wè Kolòn</button>
+      </div>
+      <div id="s2Columns" style="font-size:12px;color:var(--gray-500);margin-bottom:12px;"></div>
+      <div style="display:flex;justify-content:space-between;">
+        <button class="btn btn-outline" onclick="prevStep(1)">← Retou</button>
+        <button class="btn btn-primary" style="width:auto;" onclick="nextStep(3)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Column Mapping -->
+    <div class="setup-step" id="step3" style="display:none;">
+      <h3 style="color:var(--green);margin-bottom:12px;">🔗 Column Mapping</h3>
+      <p style="font-size:13px;margin-bottom:16px;">Di app la ki kolòn nan yon sheet koresponn ak ki kolòn nan lòt sheet la</p>
+      <div id="mappingContainer">
+        <p style="text-align:center;color:var(--gray-500);padding:20px;">Ranpli Step 1 ak 2 anvan pou kreye mappings</p>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:12px;">
+        <button class="btn btn-outline" onclick="prevStep(2)">← Retou</button>
+        <button class="btn btn-primary" style="width:auto;" onclick="nextStep(4)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Review & Save -->
+    <div class="setup-step" id="step4" style="display:none;">
+      <h3 style="color:var(--rouj);margin-bottom:12px;">✅ Review & Anrejistre</h3>
+      <p style="font-size:13px;margin-bottom:16px;">Verifye tout bagay anvan w anrejistre</p>
+      <div id="reviewContent" style="background:var(--gray-50);padding:16px;border-radius:8px;font-size:13px;margin-bottom:16px;"></div>
+      <div style="display:flex;gap:12px;justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="prevStep(3)">← Modifye</button>
+        <button class="btn btn-primary" style="width:auto;" onclick="handleSaveSetup()">💾 Anrejistre & Kòmanse</button>
+      </div>
+    </div>
+
+    <div class="error-msg" id="setupError"></div>
+  </div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div class="app-container" id="appContainer">
+  <header class="app-header">
+    <div class="brand"><span>🙏</span> Devotion Tracker</div>
+    <div class="header-right">
+      <span class="user-badge" id="userBadge"></span>
+      <button class="btn btn-sm btn-outline" style="color:white;border-color:rgba(255,255,255,0.3);" onclick="handleLogout()">Dekonekte</button>
+    </div>
+  </header>
+  <div class="app-body">
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
+    <nav class="sidebar" id="sidebar">
+      <a href="#" class="active" onclick="showPage('dashboard',this)"><span>📊</span> Dashboard</a>
+      <a href="#" onclick="showPage('tracker',this)"><span>🙏</span> Tracker</a>
+      <a href="#" onclick="showPage('members',this)"><span>👥</span> Membres</a>
+      <a href="#" onclick="showPage('connections',this)"><span>🔌</span> Koneksyon</a>
+      <a href="#" onclick="showPage('mappings',this)"><span>🔗</span> Mapping</a>
+      <a href="#" onclick="showPage('settings',this)"><span>⚙️</span> Settings</a>
+    </nav>
+
+    <div class="main-content">
+      <!-- DASHBOARD -->
+      <div class="page active" id="pageDashboard">
+        <div class="page-header"><h2>📊 Dashboard</h2><p>Aperèvi sou tout devotions yo</p></div>
+        <div id="dashboardContent"><div class="loading"><div class="spinner"></div>Chajman...</div></div>
+      </div>
+
+      <!-- TRACKER -->
+      <div class="page" id="pageTracker">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div><h2>🙏 Tracker Devotion</h2><p>Gere tout devotions ou yo</p></div>
+          <button class="btn btn-primary" onclick="openAddModal()" style="width:auto;">+ Nouvo Devotion</button>
+        </div>
+        <div id="trackerContent"><div class="loading"><div class="spinner"></div>Chajman...</div></div>
+      </div>
+
+      <!-- MEMBRES -->
+      <div class="page" id="pageMembers">
+        <div class="page-header"><h2>👥 Membres</h2><p>Baz done manm yo</p></div>
+        <div id="membersContent"><div class="loading"><div class="spinner"></div>Chajman...</div></div>
+      </div>
+
+      <!-- CONNECTIONS -->
+      <div class="page" id="pageConnections">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div><h2>🔌 Koneksyon</h2><p>Jere spreadsheet yo</p></div>
+          <button class="btn btn-primary" style="width:auto;" onclick="openAddConnectionModal()">+ Ajoute</button>
+        </div>
+        <div id="connectionsContent"><div class="loading"><div class="spinner"></div>Chajman...</div></div>
+      </div>
+
+      <!-- MAPPINGS -->
+      <div class="page" id="pageMappings">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div><h2>🔗 Mapping Kolòn</h2><p>Konekte kolòn ant spreadsheet yo</p></div>
+          <button class="btn btn-primary" style="width:auto;" onclick="openAddMappingModal()">+ Ajoute Mapping</button>
+        </div>
+        <div id="mappingsContent"><div class="loading"><div class="spinner"></div>Chajman...</div></div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="page" id="pageSettings">
+        <div class="page-header"><h2>⚙️ Settings</h2><p>Konfigirasyon jeneral</p></div>
+        <div id="settingsContent"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD/EDIT DEVOTION -->
+<div class="modal-overlay" id="devotionModal">
+  <div class="modal">
+    <h3 id="modalTitle">Ajoute Devotion</h3>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- MODAL: PHONE LOOKUP -->
+<div class="modal-overlay" id="lookupModal">
+  <div class="modal" style="max-width:500px;">
+    <h3>🔍 Chèche Moun</h3>
+    <div class="form-group">
+      <label>Nimewo Telefòn</label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="lookupPhone" placeholder="Antre nimewo..." style="flex:1;">
+        <button class="btn btn-mauve" onclick="handleLookup()">Chèche</button>
+      </div>
+    </div>
+    <div class="lookup-result" id="lookupResult"></div>
+    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal('lookupModal')">Fèmen</button></div>
+  </div>
+</div>
+
+<!-- MODAL: ADD CONNECTION -->
+<div class="modal-overlay" id="connectionModal">
+  <div class="modal" style="max-width:500px;">
+    <h3>🔌 Ajoute Koneksyon</h3>
+    <div class="form-group"><label>Non Koneksyon</label><input type="text" id="connName" placeholder="eg: Volunteers"></div>
+    <div class="form-group"><label>Wòl</label>
+      <select id="connRole">
+        <option value="lookup">Lookup (chèche moun)</option>
+        <option value="devotion">Devotion (sheet prensipal)</option>
+        <option value="reference">Referans (done siplemantè)</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Spreadsheet ID</label><input type="text" id="connId" placeholder="ID spreadsheet la"></div>
+    <div class="form-group"><label>Tab</label>
+      <select id="connTab"><option value="">— Antre ID anvan —</option></select>
+    </div>
+    <button class="btn btn-sm btn-outline" onclick="loadConnTabs()">🔄 Chaje Tabs</button>
+    <div class="lookup-result" id="connPreview" style="margin-top:12px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('connectionModal')">Anile</button>
+      <button class="btn btn-primary" style="width:auto;" onclick="handleAddConnection()">Ajoute</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD MAPPING -->
+<div class="modal-overlay" id="mappingModal">
+  <div class="modal" style="max-width:550px;">
+    <h3>🔗 Ajoute Mapping</h3>
+    <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Di ki kolòn nan yon sheet koresponn ak ki kolòn nan yon lòt</p>
+    <div class="form-group"><label>Depi (Source)</label>
+      <select id="mapFromConn"><option value="">Chwazi koneksyon...</option></select>
+      <select id="mapFromCol" style="margin-top:6px;"><option value="">Chwazi kolòn...</option></select>
+    </div>
+    <div style="text-align:center;font-size:24px;color:var(--mauve);padding:8px;">⬇</div>
+    <div class="form-group"><label>Rive (Destination)</label>
+      <select id="mapToConn"><option value="">Chwazi koneksyon...</option></select>
+      <select id="mapToCol" style="margin-top:6px;"><option value="">Chwazi kolòn...</option></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('mappingModal')">Anile</button>
+      <button class="btn btn-primary" style="width:auto;" onclick="handleAddMapping()">Ajoute</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let STATE = {
+  token: null,
+  userEmail: null,
+  config: null,
+  devotionHeaders: [], devotionRows: [],
+  currentPage: 0, pageSize: 25, searchTerm: '',
+  sortCol: null, sortDir: 'asc',
+  currentPageName: 'dashboard',
+  setupStep: 1,
+};
+let charts = {};
+
+// ═══════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════
+function handleLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pin = document.getElementById('loginPin').value.trim();
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  if (!email || !pin) { errEl.textContent = 'Tanpri ranpli tout chan yo'; errEl.style.display = 'block'; return; }
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        STATE.token = res.token;
+        STATE.userEmail = email;
+        document.getElementById('userBadge').textContent = email;
+        document.getElementById('loginPage').style.display = 'none';
+        checkConfig();
+      } else {
+        errEl.textContent = res.error;
+        errEl.style.display = 'block';
+      }
+    })
+    .withFailureHandler(function(err) {
+      errEl.textContent = 'Erè: ' + err.message;
+      errEl.style.display = 'block';
+    })
+    .authenticate(email, pin);
+}
+
+function handleLogout() {
+  google.script.run
+    .withSuccessHandler(function() {
+      STATE.token = null; STATE.config = null;
+      document.getElementById('appContainer').style.display = 'none';
+      document.getElementById('setupPage').style.display = 'none';
+      document.getElementById('loginPage').style.display = 'flex';
+      document.getElementById('loginEmail').value = '';
+      document.getElementById('loginPin').value = '';
+      Object.values(charts).forEach(c => { try { c.destroy(); } catch(e) {} }); charts = {};
+    })
+    .logout(STATE.token);
+}
+
+function checkConfig() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.hasConfig) {
+        STATE.config = res.config;
+        document.getElementById('appContainer').style.display = 'block';
+        initApp();
+      } else {
+        document.getElementById('setupPage').style.display = 'flex';
+      }
+    })
+    .withFailureHandler(function(err) {
+      toast('Erè: ' + err.message, 'error');
+    })
+    .checkHasConfig(STATE.token);
+}
+
+// ═══════════════════════════════════════════
+// SETUP WIZARD
+// ═══════════════════════════════════════════
+let _setupData = { connections: [], mappings: [] };
+
+function nextStep(n) {
+  if (n === 2 && !validateStep1()) return;
+  if (n === 3 && !validateStep2()) return;
+  if (n === 4) buildReview();
+
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById('step' + i).style.display = i === n ? 'block' : 'none';
+    document.getElementById('step' + i + 'Dot').className = i < n ? 'step-dot done' : (i === n ? 'step-dot active' : 'step-dot');
+    if (i < 4) document.getElementById('step' + i + 'Line').className = i < n ? 'step-line done' : 'step-line';
+  }
+  STATE.setupStep = n;
+}
+
+function prevStep(n) {
+  nextStep(n);
+}
+
+function validateStep1() {
+  const id = document.getElementById('s1Id').value.trim();
+  if (!id) { toast('Antre spreadsheet ID a', 'error'); return false; }
+  _setupData.connections[0] = {
+    name: document.getElementById('s1Name').value.trim() || 'Devotionals',
+    role: 'devotion',
+    spreadsheetId: id,
+    sheetTab: document.getElementById('s1Tab').value,
+  };
+  return true;
+}
+
+function validateStep2() {
+  const id = document.getElementById('s2Id').value.trim();
+  if (!id) { toast('Antre spreadsheet ID a pou members', 'error'); return false; }
+  _setupData.connections[1] = {
+    name: document.getElementById('s2Name').value.trim() || 'Members',
+    role: 'lookup',
+    spreadsheetId: id,
+    sheetTab: document.getElementById('s2Tab').value,
+  };
+  // Chaje kolòn pou step 3
+  buildMappingUI();
+  return true;
+}
+
+function loadTabs(prefix) {
+  const idEl = document.getElementById(prefix + 'Id');
+  const tabEl = document.getElementById(prefix + 'Tab');
+  const id = idEl.value.trim();
+  if (!id) { toast('Antre spreadsheet ID anvan', 'error'); return; }
+
+  tabEl.innerHTML = '<option>Chajman...</option>';
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        tabEl.innerHTML = '<option value="">— Chwazi tab —</option>';
+        res.tabs.forEach(t => {
+          tabEl.innerHTML += `<option value="${t.name}">${t.name}</option>`;
+        });
+        toast('Tabs chaje!', 'success');
+      } else {
+        tabEl.innerHTML = '<option value="">— Erè —</option>';
+        toast(res.error, 'error');
+      }
+    })
+    .withFailureHandler(function(err) {
+      tabEl.innerHTML = '<option value="">— Erè —</option>';
+      toast('Erè: ' + err.message, 'error');
+    })
+    .listSpreadsheetTabs(STATE.token, id);
+}
+
+function loadColumns(prefix) {
+  const idEl = document.getElementById(prefix + 'Id');
+  const tabEl = document.getElementById(prefix + 'Tab');
+  const id = idEl.value.trim();
+  const tab = tabEl.value;
+  if (!id) { toast('Antre spreadsheet ID anvan', 'error'); return; }
+
+  const colEl = document.getElementById(prefix + 'Columns');
+  colEl.innerHTML = 'Chajman...';
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok && res.columns) {
+        colEl.innerHTML = '<strong>Kolòn yo:</strong> ' +
+          res.columns.map(c => `<span style="display:inline-block;background:var(--gray-100);padding:2px 8px;border-radius:4px;margin:2px;">${c.name}</span>`).join('');
+      } else {
+        colEl.innerHTML = '<span style="color:var(--rouj)">' + (res.error || 'Pa ka chaje kolòn') + '</span>';
+      }
+    })
+    .withFailureHandler(function(err) {
+      colEl.innerHTML = '<span style="color:var(--rouj)">Erè: ' + err.message + '</span>';
+    })
+    .listSheetColumns(STATE.token, id, tab);
+}
+
+function buildMappingUI() {
+  const container = document.getElementById('mappingContainer');
+
+  // Jwenn kolòn yo
+  const loadAndShow = function() {
+    const s1 = _setupData.connections[0];
+    const s2 = _setupData.connections[1];
+    if (!s1 || !s2 || !s1.spreadsheetId || !s2.spreadsheetId) {
+      container.innerHTML = '<p style="text-align:center;color:var(--gray-500);padding:20px;">Ranpli tou de koneksyon yo anvan</p>';
+      return;
+    }
+
+    Promise.all([
+      new Promise(function(resolve) {
+        google.script.run.withSuccessHandler(resolve).listSheetColumns(STATE.token, s1.spreadsheetId, s1.sheetTab);
+      }),
+      new Promise(function(resolve) {
+        google.script.run.withSuccessHandler(resolve).listSheetColumns(STATE.token, s2.spreadsheetId, s2.sheetTab);
+      }),
+    ]).then(function(results) {
+      const cols1 = results[0].ok ? results[0].columns : [];
+      const cols2 = results[1].ok ? results[1].columns : [];
+
+      var html = '<p style="font-size:13px;color:var(--gray-500);margin-bottom:12px;">Chwazi ki kolòn nan Sheet 1 (Devotion) matche ak ki kolòn nan Sheet 2 (Members):</p>';
+
+      // Default mappings
+      var defaultMaps = [
+        { from: 'PHONE', to: 'PHONE' },
+        { from: 'FULL NAME', to: 'FULL NAME' },
+      ];
+
+      defaultMaps.forEach(function(def, idx) {
+        html += '<div class="mapping-row">';
+        html += '<select id="mapFrom_' + idx + '">';
+        html += '<option value="">— Chwazi —</option>';
+        cols1.forEach(function(c) {
+          var sel = c.name.toUpperCase().includes(def.from) ? ' selected' : '';
+          html += '<option value="' + c.name.replace(/"/g,'&quot;') + '"' + sel + '>' + c.name + '</option>';
+        });
+        html += '</select>';
+        html += '<div class="arrow">→</div>';
+        html += '<select id="mapTo_' + idx + '">';
+        html += '<option value="">— Chwazi —</option>';
+        cols2.forEach(function(c) {
+          var sel = c.name.toUpperCase().includes(def.to) ? ' selected' : '';
+          html += '<option value="' + c.name.replace(/"/g,'&quot;') + '"' + sel + '>' + c.name + '</option>';
+        });
+        html += '</select>';
+        html += '</div>';
+      });
+
+      html += '<p style="font-size:12px;color:var(--gray-500);margin-top:8px;">💡 Sa pèmèt app la konnen ki kolòn matche ant spreadsheet yo lè w ap chèche moun pa telefòn.</p>';
+
+      container.innerHTML = html;
+    });
+  };
+
+  // Si kolòn deja konekte, itilize yo
+  if (_setupData.connections.length >= 2) {
+    loadAndShow();
+  } else {
+    container.innerHTML = '<p style="text-align:center;color:var(--gray-500);padding:20px;">Ranpli Step 1 ak 2 anvan pou kreye mappings</p>';
+  }
+}
+
+function buildReview() {
+  // Ranmase mappings yo
+  const maps = [];
+  for (let i = 0; i < 10; i++) {
+    const fromEl = document.getElementById('mapFrom_' + i);
+    const toEl = document.getElementById('mapTo_' + i);
+    if (fromEl && toEl && fromEl.value && toEl.value) {
+      maps.push({
+        fromConn: _setupData.connections[0].name,
+        fromColumn: fromEl.value,
+        toConn: _setupData.connections[1].name,
+        toColumn: toEl.value,
+      });
+    }
+  }
+
+  _setupData.mappings = maps;
+
+  const s1 = _setupData.connections[0];
+  const s2 = _setupData.connections[1];
+
+  let html = '<div style="margin-bottom:12px;"><strong style="color:var(--mauve);">📋 Devotion Sheet:</strong><br>';
+  html += 'Non: ' + s1.name + '<br>';
+  html += 'ID: <code style="font-size:11px;">' + s1.spreadsheetId + '</code><br>';
+  html += 'Tab: ' + (s1.sheetTab || 'Premye tab') + '</div>';
+
+  html += '<div style="margin-bottom:12px;"><strong style="color:var(--bleu);">👥 Members Sheet:</strong><br>';
+  html += 'Non: ' + s2.name + '<br>';
+  html += 'ID: <code style="font-size:11px;">' + s2.spreadsheetId + '</code><br>';
+  html += 'Tab: ' + (s2.sheetTab || 'Premye tab') + '</div>';
+
+  if (maps.length > 0) {
+    html += '<div style="margin-bottom:12px;"><strong style="color:var(--green);">🔗 Mappings:</strong></div>';
+    maps.forEach(function(m) {
+      html += '<div style="font-size:12px;padding:4px 0;">' + m.fromColumn + ' <span style="color:var(--mauve);font-weight:700;">→</span> ' + m.toColumn + '</div>';
+    });
+  }
+
+  document.getElementById('reviewContent').innerHTML = html;
+}
+
+function handleSaveSetup() {
+  // Ranmase vèsyon final la
+  buildReview();
+
+  const config = {
+    connections: _setupData.connections.filter(c => c && c.spreadsheetId),
+    mappings: _setupData.mappings || [],
+  };
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        STATE.config = config;
+        document.getElementById('setupPage').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'block';
+        toast('Konfigirasyon anrejistre!', 'success');
+        initApp();
+      } else {
+        toast(res.error, 'error');
+      }
+    })
+    .withFailureHandler(function(err) {
+      toast('Erè: ' + err.message, 'error');
+    })
+    .saveFullConfig(STATE.token, config);
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+function initApp() {
+  loadDashboard();
+  loadTracker();
+  loadMembers();
+  loadConnections();
+  loadMappings();
+  loadSettings();
+}
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+function showPage(name, el) {
+  STATE.currentPageName = name;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
+  document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+  if (el) el.classList.add('active');
+  if (window.innerWidth <= 768) toggleSidebar();
+
+  if (name === 'dashboard') loadDashboard();
+  else if (name === 'tracker') loadTracker();
+  else if (name === 'members') loadMembers();
+  else if (name === 'connections') loadConnections();
+  else if (name === 'mappings') loadMappings();
+  else if (name === 'settings') loadSettings();
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarBackdrop').classList.toggle('open');
+}
+
+// ═══════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════
+function toast(msg, type) {
+  var el = document.createElement('div');
+  el.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:14px 20px;border-radius:10px;color:white;font-weight:600;font-size:14px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.2);animation:slideUp 0.3s ease;max-width:400px;';
+  el.style.background = type === 'error' ? 'linear-gradient(135deg,#EF4444,#F87171)' : type === 'success' ? 'linear-gradient(135deg,#22C55E,#4ADE80)' : 'linear-gradient(135deg,#8B5CF6,#A78BFA)';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(function() { el.style.opacity = '0'; el.style.transition = '0.3s'; setTimeout(function() { el.remove(); }, 300); }, 3500);
+}
+
+// ═══════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════
+function loadDashboard() {
+  var container = document.getElementById('dashboardContent');
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res.ok && res.needsSetup) { container.innerHTML = '<p style="text-align:center;padding:40px;color:var(--gray-500);">Pa gen konfigirasyon. Ale nan <a href="#" onclick="showPage(\'connections\',null)" style="color:var(--mauve);">Koneksyon</a> pou kòmanse.</p>'; return; }
+      if (!res.ok) { container.innerHTML = '<p style="color:var(--rouj)">Erè: ' + res.error + '</p>'; return; }
+      renderDashboard(res.stats, res.connections, res.mappings);
+    })
+    .withFailureHandler(function(err) { container.innerHTML = '<p style="color:var(--rouj)">Erè: ' + err.message + '</p>'; })
+    .getDashboardStats(STATE.token);
+}
+
+function renderDashboard(stats, connections, mappings) {
+  var monthlyData = (stats.byMonth && typeof stats.byMonth === 'object') ? stats.byMonth : {};
+  var connCount = connections ? connections.length : 0;
+  var mapCount = mappings ? mappings.length : 0;
+
+  var html = '<div class="stats-grid">';
+  html += '<div class="stat-card mauve"><div class="stat-label">Total Devotions</div><div class="stat-number">' + (stats.totalDevotions||0) + '</div></div>';
+  html += '<div class="stat-card bleu"><div class="stat-label">Jodi a</div><div class="stat-number">' + (stats.todayCount||0) + '</div></div>';
+  html += '<div class="stat-card green"><div class="stat-label">Total Manm</div><div class="stat-number">' + (stats.totalMembers||0) + '</div></div>';
+  html += '<div class="stat-card rouj"><div class="stat-label">Koneksyon</div><div class="stat-number">' + connCount + '</div></div>';
+  html += '</div>';
+
+  html += '<div class="charts-grid">';
+  html += '<div class="chart-card"><h3>📈 Devotion pa Mwa</h3><canvas id="chartMonth"></canvas></div>';
+  html += '<div class="chart-card"><h3>🏫 Pa Campus</h3><canvas id="chartCampus"></canvas></div>';
+  html += '<div class="chart-card"><h3>👤 Top Reporters</h3><canvas id="chartReporter"></canvas></div>';
+  html += '<div class="chart-card"><h3>⛪ Pa Ministry</h3><canvas id="chartMinistry"></canvas></div>';
+  html += '</div>';
+
+  if (mapCount > 0) {
+    html += '<div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-top:16px;font-size:13px;">';
+    html += '<span style="font-weight:600;">🔗 Mappings aktive:</span> ' + mapCount + ' kolòn konekte ant spreadsheet';
+    html += '</div>';
+  }
+
+  container.innerHTML = html;
+
+  Object.values(charts).forEach(function(c) { try { c.destroy(); } catch(e) {} }); charts = {};
+
+  setTimeout(function() {
+    renderChart('chartMonth', 'bar', Object.keys(monthlyData), Object.values(monthlyData), null, ['#8B5CF6','#3B82F6','#22C55E','#EF4444','#A78BFA','#60A5FA']);
+    renderChart('chartCampus', 'pie', Object.keys(stats.byCampus||{}), Object.values(stats.byCampus||{}));
+    renderChart('chartReporter', 'bar', Object.keys(stats.byReporter||{}), Object.values(stats.byReporter||{}), 'y', ['#8B5CF6']);
+    renderChart('chartMinistry', 'doughnut', Object.keys(stats.byMinistry||{}), Object.values(stats.byMinistry||{}));
+  }, 50);
+}
+
+function renderChart(id, type, labels, data, indexAxis, bgColors) {
+  var ctx = document.getElementById(id);
+  if (!ctx) return;
+
+  var defaultColors = ['#8B5CF6','#3B82F6','#22C55E','#EF4444','#A78BFA','#60A5FA','#4ADE80','#F87171','#7C3AED','#2563EB'];
+  var colors = bgColors || labels.map(function(_, i) { return defaultColors[i % defaultColors.length]; });
+
+  var opts = {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: { legend: { display: type !== 'bar', position: 'bottom', labels: { font: { size: 10 } } } },
+    scales: type === 'bar' ? { y: { beginAtZero: true, ticks: { stepSize: 1 } } } : undefined,
+  };
+  if (indexAxis === 'y') { opts.indexAxis = 'y'; opts.scales = { x: { beginAtZero: true, ticks: { stepSize: 1 } } }; }
+
+  charts[id] = new Chart(ctx, {
+    type: type,
+    data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderRadius: 6 }] },
+    options: opts,
+  });
+}
+
+// ═══════════════════════════════════════════
+// TRACKER
+// ═══════════════════════════════════════════
+function loadTracker() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res.ok && res.needsSetup) { document.getElementById('trackerContent').innerHTML = '<p style="text-align:center;padding:40px;color:var(--gray-500);">Pa gen konfigirasyon. Ale nan Koneksyon pou kòmanse.</p>'; return; }
+      if (!res.ok) { document.getElementById('trackerContent').innerHTML = '<p style="color:var(--rouj)">Erè: ' + res.error + '</p>'; return; }
+      STATE.devotionHeaders = res.headers || [];
+      STATE.devotionRows = res.rows || [];
+      renderTracker();
+    })
+    .withFailureHandler(function(err) { document.getElementById('trackerContent').innerHTML = '<p style="color:var(--rouj)">Erè: ' + err.message + '</p>'; })
+    .getTrackerData(STATE.token);
+}
+
+function renderTracker() {
+  var headers = STATE.devotionHeaders;
+  var allRows = STATE.devotionRows;
+  var term = STATE.searchTerm.toLowerCase();
+  var filtered = term ? allRows.filter(function(r) { return headers.some(function(h) { return String(r[h]||'').toLowerCase().includes(term); }); }) : allRows;
+
+  if (STATE.sortCol) {
+    filtered.sort(function(a, b) {
+      var av = String(a[STATE.sortCol]||''), bv = String(b[STATE.sortCol]||'');
+      return STATE.sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+  }
+
+  var totalPages = Math.ceil(filtered.length / STATE.pageSize) || 1;
+  var page = Math.min(STATE.currentPage, totalPages - 1);
+  var pageRows = filtered.slice(page * STATE.pageSize, (page + 1) * STATE.pageSize);
+
+  var showCols = headers.filter(function(h) {
+    return !h.toUpperCase().startsWith('COLUMN') && !h.includes('Duplicate') && !h.includes('CLEAN PHONE');
+  });
+  if (showCols.length > 8) showCols.length = 8;
+
+  var html = '<div class="table-toolbar">';
+  html += '<input type="search" placeholder="Chèche..." value="' + STATE.searchTerm + '" oninput="STATE.searchTerm=this.value;STATE.currentPage=0;renderTracker()">';
+  html += '<button class="btn btn-sm btn-mauve" onclick="openLookupModal()">🔍 Chèche Moun</button>';
+  html += '<span style="font-size:13px;color:var(--gray-500);">' + filtered.length + ' antre</span></div>';
+  html += '<div class="table-wrap"><table><thead><tr>';
+  showCols.forEach(function(h) { html += '<th onclick="sortBy(\'' + h.replace(/'/g,"\\'") + '\')">' + h + ' ' + (STATE.sortCol === h ? (STATE.sortDir === 'asc' ? '▲' : '▼') : '') + '</th>'; });
+  html += '<th style="width:100px;">Aksyon</th></tr></thead><tbody>';
+
+  if (pageRows.length === 0) {
+    html += '<tr><td colspan="' + (showCols.length + 1) + '" style="text-align:center;padding:40px;color:var(--gray-500);">Pa gen devotion ankò</td></tr>';
+  } else {
+    pageRows.forEach(function(row) {
+      html += '<tr>';
+      showCols.forEach(function(h) { html += '<td title="' + (row[h]||'') + '">' + (row[h]||'') + '</td>'; });
+      html += '<td><button class="btn btn-sm btn-bleu" onclick="openEditModal(' + row._row + ')" style="padding:4px 8px;font-size:11px;">Edit</button> ';
+      html += '<button class="btn btn-sm btn-rouj" onclick="handleDelete(' + row._row + ')" style="padding:4px 8px;font-size:11px;">🗑</button></td>';
+      html += '</tr>';
+    });
+  }
+  html += '</tbody></table></div>';
+
+  html += '<div class="pagination">';
+  html += '<button ' + (page === 0 ? 'disabled' : '') + ' onclick="STATE.currentPage=0;renderTracker()">««</button>';
+  html += '<button ' + (page === 0 ? 'disabled' : '') + ' onclick="STATE.currentPage=Math.max(0,' + (page-1) + ');renderTracker()">«</button>';
+  html += '<span style="font-size:13px;color:var(--gray-500);padding:0 12px;">Paj ' + (page+1) + ' / ' + totalPages + '</span>';
+  html += '<button ' + (page >= totalPages-1 ? 'disabled' : '') + ' onclick="STATE.currentPage=Math.min(' + (totalPages-1) + ',' + (page+1) + ');renderTracker()">»</button>';
+  html += '<button ' + (page >= totalPages-1 ? 'disabled' : '') + ' onclick="STATE.currentPage=' + (totalPages-1) + ';renderTracker()">»»</button>';
+  html += '</div>';
+
+  document.getElementById('trackerContent').innerHTML = html;
+}
+
+function sortBy(col) {
+  if (STATE.sortCol === col) { STATE.sortDir = STATE.sortDir === 'asc' ? 'desc' : 'asc'; }
+  else { STATE.sortCol = col; STATE.sortDir = 'asc'; }
+  renderTracker();
+}
+
+// ═══════════════════════════════════════════
+// ADD/EDIT MODAL
+// ═══════════════════════════════════════════
+function openAddModal() {
+  document.getElementById('modalTitle').textContent = '➕ Nouvo Devotion';
+  buildModalForm(null);
+  document.getElementById('devotionModal').classList.add('open');
+}
+
+function openEditModal(rowIndex) {
+  var row = STATE.devotionRows.find(function(r) { return r._row === rowIndex; });
+  if (!row) { toast('Pa jwenn devotion sa', 'error'); return; }
+  document.getElementById('modalTitle').textContent = '✏️ Modifye Devotion';
+  buildModalForm(row);
+  document.getElementById('devotionModal').classList.add('open');
+}
+
+function buildModalForm(row) {
+  var headers = STATE.devotionHeaders;
+  var isEdit = row !== null;
+  var editableCols = headers.filter(function(h) {
+    return !h.toUpperCase().startsWith('COLUMN') && !h.includes('Duplicate') && !h.includes('CLEAN PHONE') && !h.includes('Name and Date') && !h.includes('Devo Duplicate');
+  });
+
+  var html = '';
+  editableCols.forEach(function(h) {
+    var val = row ? (row[h] !== undefined && row[h] !== null ? row[h] : '') : '';
+    var isLong = h.toUpperCase().includes('REPORTED BY') || h.toUpperCase().includes('COMMENT');
+    var isDate = h.toUpperCase().includes('DATE') || h.toUpperCase().includes('TIMESTAMP');
+
+    if (isDate && !isEdit && h === 'DATE POSTED') {
+      var today = new Date().toISOString().split('T')[0];
+      html += '<div class="form-group"><label>' + h + '</label><input type="date" name="' + h + '" value="' + (val || today) + '"></div>';
+    } else if (isDate) {
+      html += '<div class="form-group"><label>' + h + '</label><input type="date" name="' + h + '" value="' + val + '"></div>';
+    } else if (isLong) {
+      html += '<div class="form-group"><label>' + h + '</label><textarea name="' + h + '" rows="3" style="width:100%;padding:10px;border:2px solid var(--gray-200);border-radius:8px;font-family:var(--font);resize:vertical;">' + val + '</textarea></div>';
+    } else if (h.toUpperCase().includes('PHONE') || h.toUpperCase().includes('HP NUMBER')) {
+      html += '<div class="form-group"><label>' + h + '</label><div style="display:flex;gap:6px;">';
+      html += '<input type="text" name="' + h + '" value="' + val + '" style="flex:1;" placeholder="+XXX XXX XXXX">';
+      html += '<button type="button" class="btn btn-sm btn-mauve" onclick="lookupAndFill(\'' + h + '\')" style="white-space:nowrap;">🔍 Chèche</button></div></div>';
+    } else {
+      html += '<div class="form-group"><label>' + h + '</label><input type="text" name="' + h + '" value="' + val.replace(/"/g,'&quot;') + '"></div>';
+    }
+  });
+
+  html += '<div class="lookup-result" id="modalLookupResult"></div>';
+  html += '<div class="modal-actions">';
+  html += '<button class="btn btn-outline" onclick="closeModal(\'devotionModal\')">Anile</button>';
+  html += '<button class="btn btn-primary" style="width:auto;" onclick="saveDevotion(' + (isEdit ? row._row : null) + ')">💾 Anrejistre</button></div>';
+
+  document.getElementById('modalBody').innerHTML = html;
+}
+
+function lookupAndFill(phoneField) {
+  var phoneEl = document.querySelector('input[name="' + phoneField + '"]');
+  if (!phoneEl || !phoneEl.value.trim()) { toast('Antre nimewo anvan pou chèche', 'error'); return; }
+
+  var resultEl = document.getElementById('modalLookupResult');
+  resultEl.className = 'lookup-result';
+  resultEl.innerHTML = '<div style="text-align:center;color:var(--gray-500);font-size:13px;">Chèche...</div>';
+  resultEl.style.display = 'block';
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok && res.found) {
+        var m = res.member;
+        resultEl.className = 'lookup-result found';
+        var infoHtml = '<h4>✅ Moun jwenn' + (res.fromConn ? ' nan ' + res.fromConn : '') + '</h4><table>';
+        var shown = 0;
+        for (var k in m) {
+          if (m.hasOwnProperty(k) && !k.startsWith('_') && shown < 6) {
+            infoHtml += '<tr><td style="font-weight:600;width:100px;">' + k + '</td><td>' + (m[k]||'-') + '</td></tr>';
+            shown++;
+          }
+        }
+        infoHtml += '</table>';
+        resultEl.innerHTML = infoHtml;
+
+        // Ranpli non otomatikman
+        var nameEl = document.querySelector('input[name="FULL NAME"]') || document.querySelector('input[name="REPORTER"]');
+        if (!nameEl) {
+          // Chèche nan DOM pou tout input
+          var allInputs = document.querySelectorAll('#modalBody input');
+          for (var i = 0; i < allInputs.length; i++) {
+            var inp = allInputs[i];
+            if (inp.name.toUpperCase().includes('NAME') || inp.name.toUpperCase().includes('REPORTER')) {
+              var nameCol = res.headers.find(function(h) { return h.toUpperCase().includes('FULL NAME') || h.toUpperCase().includes('NAME'); });
+              if (nameCol && m[nameCol]) inp.value = m[nameCol];
+              break;
+            }
+          }
+        } else if (nameEl) {
+          var nameCol = res.headers.find(function(h) { return h.toUpperCase().includes('FULL NAME') || h.toUpperCase().includes('NAME'); });
+          if (nameCol && m[nameCol]) nameEl.value = m[nameCol];
+        }
+        toast('Moun jwenn!', 'success');
+      } else {
+        resultEl.className = 'lookup-result not-found';
+        resultEl.innerHTML = '<h4>❌ ' + (res.error || 'Pa jwenn moun') + '</h4>';
+      }
+    })
+    .withFailureHandler(function(err) {
+      resultEl.className = 'lookup-result not-found';
+      resultEl.innerHTML = '<h4>❌ Erè: ' + err.message + '</h4>';
+    })
+    .lookupByPhone(STATE.token, phoneEl.value);
+}
+
+function saveDevotion(rowIndex) {
+  var form = document.getElementById('modalBody');
+  var inputs = form.querySelectorAll('input, textarea, select');
+  var data = {};
+  inputs.forEach(function(el) { if (el.name) data[el.name] = el.value; });
+
+  var cb = function(res) {
+    if (res.ok) { toast(res.message, 'success'); closeModal('devotionModal'); loadTracker(); loadDashboard(); }
+    else { toast(res.error || 'Erè', 'error'); }
+  };
+  var errCb = function(err) { toast('Erè: ' + err.message, 'error'); };
+
+  if (rowIndex) {
+    google.script.run.withSuccessHandler(cb).withFailureHandler(errCb).updateDevotion(STATE.token, rowIndex, data);
+  } else {
+    google.script.run.withSuccessHandler(cb).withFailureHandler(errCb).addDevotion(STATE.token, data);
+  }
+}
+
+function handleDelete(rowIndex) {
+  if (!confirm('Èske ou sèten?')) return;
+  google.script.run
+    .withSuccessHandler(function(res) { if (res.ok) { toast(res.message, 'success'); loadTracker(); loadDashboard(); } else { toast(res.error, 'error'); } })
+    .withFailureHandler(function(err) { toast('Erè: ' + err.message, 'error'); })
+    .deleteDevotion(STATE.token, rowIndex);
+}
+
+// ═══════════════════════════════════════════
+// LOOKUP MODAL
+// ═══════════════════════════════════════════
+function openLookupModal() {
+  document.getElementById('lookupPhone').value = '';
+  document.getElementById('lookupResult').className = 'lookup-result';
+  document.getElementById('lookupResult').innerHTML = '';
+  document.getElementById('lookupModal').classList.add('open');
+}
+
+function handleLookup() {
+  var phone = document.getElementById('lookupPhone').value.trim();
+  var resultEl = document.getElementById('lookupResult');
+  if (!phone) { toast('Antre yon nimewo', 'error'); return; }
+  resultEl.innerHTML = '<div style="text-align:center;color:var(--gray-500);font-size:13px;">Chèche...</div>';
+  resultEl.style.display = 'block';
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok && res.found) {
+        var m = res.member;
+        resultEl.className = 'lookup-result found';
+        var infoHtml = '<h4>✅ Moun jwenn' + (res.fromConn ? ' nan ' + res.fromConn : '') + '</h4><table>';
+        var count = 0;
+        for (var k in m) {
+          if (m.hasOwnProperty(k) && !k.startsWith('_') && count < 8) {
+            infoHtml += '<tr><td style="font-weight:600;width:120px;">' + k + '</td><td>' + (m[k]||'-') + '</td></tr>';
+            count++;
+          }
+        }
+        infoHtml += '</table>';
+        if (res.enriched) infoHtml += '<p style="font-size:11px;color:var(--green);margin-top:8px;">✅ Done anrichi ak mappings yo</p>';
+        resultEl.innerHTML = infoHtml;
+      } else {
+        resultEl.className = 'lookup-result not-found';
+        resultEl.innerHTML = '<h4>❌ ' + (res.error || 'Pa jwenn moun') + '</h4>';
+      }
+    })
+    .withFailureHandler(function(err) {
+      resultEl.className = 'lookup-result not-found';
+      resultEl.innerHTML = '<h4>❌ Erè: ' + err.message + '</h4>';
+    })
+    .lookupByPhone(STATE.token, phone);
+}
+
+// ═══════════════════════════════════════════
+// MEMBERS
+// ═══════════════════════════════════════════
+function loadMembers() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res.ok && res.needsSetup) { document.getElementById('membersContent').innerHTML = '<p style="text-align:center;padding:40px;color:var(--gray-500);">Pa gen konfigirasyon</p>'; return; }
+      if (!res.ok) { document.getElementById('membersContent').innerHTML = '<p style="color:var(--rouj)">Erè</p>'; return; }
+      STATE.members = res.members || [];
+      renderMembers();
+    })
+    .withFailureHandler(function(err) { document.getElementById('membersContent').innerHTML = '<p style="color:var(--rouj)">Erè: ' + err.message + '</p>'; })
+    .getMembersList(STATE.token);
+}
+
+function renderMembers() {
+  var members = STATE.members;
+  var html = '<div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;">';
+  html += '<p style="margin-bottom:12px;color:var(--gray-500);">' + members.length + ' manm total';
+
+  // Gwoupe pa koneksyon
+  var byConn = {};
+  members.forEach(function(m) {
+    if (!byConn[m.conn]) byConn[m.conn] = [];
+    byConn[m.conn].push(m);
+  });
+
+  for (var connName in byConn) {
+    html += '<div style="margin-top:16px;"><h4 style="color:var(--mauve);font-size:14px;margin-bottom:8px;">📁 ' + connName + ' (' + byConn[connName].length + ')</h4>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">';
+    byConn[connName].slice(0, 100).forEach(function(m) {
+      html += '<div style="padding:14px;border:1px solid var(--gray-200);border-radius:var(--radius-sm);">';
+      html += '<div style="font-weight:600;color:var(--mauve);">' + (m.name || 'Anonim') + '</div>';
+      html += '<div style="font-size:13px;color:var(--gray-500);margin-top:4px;">' + (m.phone || 'Pa gen telefòn') + '</div></div>';
+    });
+    html += '</div></div>';
+  }
+  html += '</div>';
+  document.getElementById('membersContent').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════
+// CONNECTIONS
+// ═══════════════════════════════════════════
+function loadConnections() {
+  var config = STATE.config;
+  if (!config || !config.connections) {
+    document.getElementById('connectionsContent').innerHTML = '<p style="text-align:center;color:var(--gray-500);padding:40px;">Pa gen koneksyon ankò. Klike "+ Ajoute" pou kòmanse.</p>';
+    return;
+  }
+
+  var html = '';
+  config.connections.forEach(function(conn, idx) {
+    html += '<div class="conn-card">';
+    html += '<div class="conn-header"><span class="conn-name">' + conn.name + '</span><span class="conn-role">' + conn.role + '</span></div>';
+    html += '<div class="conn-meta">ID: ' + conn.spreadsheetId + ' · Tab: ' + (conn.sheetTab || 'Premye tab') + '</div>';
+    html += '<div style="margin-top:8px;"><button class="btn btn-sm btn-rouj" onclick="deleteConnection(' + idx + ')">Efase</button></div>';
+    html += '</div>';
+  });
+  document.getElementById('connectionsContent').innerHTML = html;
+}
+
+function openAddConnectionModal() {
+  document.getElementById('connName').value = '';
+  document.getElementById('connRole').value = 'lookup';
+  document.getElementById('connId').value = '';
+  document.getElementById('connTab').innerHTML = '<option value="">— Antre ID anvan —</option>';
+  document.getElementById('connPreview').className = 'lookup-result';
+  document.getElementById('connPreview').innerHTML = '';
+  document.getElementById('connectionModal').classList.add('open');
+}
+
+function loadConnTabs() {
+  var id = document.getElementById('connId').value.trim();
+  var tabEl = document.getElementById('connTab');
+  var preview = document.getElementById('connPreview');
+  if (!id) { toast('Antre spreadsheet ID anvan', 'error'); return; }
+
+  tabEl.innerHTML = '<option>Chajman...</option>';
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        tabEl.innerHTML = '<option value="">— Premye tab —</option>';
+        res.tabs.forEach(function(t) { tabEl.innerHTML += '<option value="' + t.name + '">' + t.name + '</option>'; });
+        preview.className = 'lookup-result found';
+        preview.innerHTML = '<h4>✅ ' + res.name + '</h4><p style="font-size:13px;">' + res.tabs.length + ' tabs disponib</p>';
+      } else {
+        preview.className = 'lookup-result not-found';
+        preview.innerHTML = '<h4>❌ ' + res.error + '</h4>';
+      }
+    })
+    .listSpreadsheetTabs(STATE.token, id);
+}
+
+function handleAddConnection() {
+  var name = document.getElementById('connName').value.trim();
+  var role = document.getElementById('connRole').value;
+  var id = document.getElementById('connId').value.trim();
+  var tab = document.getElementById('connTab').value;
+
+  if (!name || !id) { toast('Ranpli non ak ID spreadsheet', 'error'); return; }
+
+  if (!STATE.config) STATE.config = { connections: [], mappings: [] };
+  if (!STATE.config.connections) STATE.config.connections = [];
+
+  STATE.config.connections.push({ name: name, role: role, spreadsheetId: id, sheetTab: tab });
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        toast('Koneksyon ajoute!', 'success');
+        closeModal('connectionModal');
+        loadConnections();
+      } else { toast(res.error, 'error'); }
+    })
+    .withFailureHandler(function(err) { toast('Erè: ' + err.message, 'error'); })
+    .saveFullConfig(STATE.token, STATE.config);
+}
+
+function deleteConnection(idx) {
+  if (!confirm('Efase koneksyon sa?')) return;
+  STATE.config.connections.splice(idx, 1);
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) { toast('Koneksyon efase!', 'success'); loadConnections(); }
+      else { toast(res.error, 'error'); }
+    })
+    .saveFullConfig(STATE.token, STATE.config);
+}
+
+// ═══════════════════════════════════════════
+// MAPPINGS
+// ═══════════════════════════════════════════
+function loadMappings() {
+  var config = STATE.config;
+  if (!config || !config.mappings || config.mappings.length === 0) {
+    document.getElementById('mappingsContent').innerHTML = '<p style="text-align:center;color:var(--gray-500);padding:40px;">Pa gen mapping ankò. Klike "+ Ajoute Mapping" pou kòmanse.</p>';
+    return;
+  }
+
+  var html = '<div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;">';
+  config.mappings.forEach(function(map, idx) {
+    html += '<div class="mapping-row">';
+    html += '<span style="font-weight:600;font-size:13px;">' + map.fromConn + ' → <code>' + map.fromColumn + '</code></span>';
+    html += '<div class="arrow">→</div>';
+    html += '<span style="font-weight:600;font-size:13px;">' + map.toConn + ' → <code>' + map.toColumn + '</code></span>';
+    html += '<button class="btn btn-sm btn-rouj" onclick="deleteMapping(' + idx + ')" style="font-size:11px;">✕</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+  document.getElementById('mappingsContent').innerHTML = html;
+}
+
+function openAddMappingModal() {
+  var config = STATE.config;
+  if (!config || !config.connections || config.connections.length < 2) {
+    toast('Bezwen omwen 2 koneksyon pou kreye mapping', 'error');
+    return;
+  }
+
+  // Ranpli selektè koneksyon yo
+  var fromEl = document.getElementById('mapFromConn');
+  var toEl = document.getElementById('mapToConn');
+  var opts = '<option value="">Chwazi koneksyon...</option>';
+  config.connections.forEach(function(c) { opts += '<option value="' + c.name + '">' + c.name + ' (' + c.role + ')</option>'; });
+  fromEl.innerHTML = opts;
+  toEl.innerHTML = opts;
+
+  document.getElementById('mapFromCol').innerHTML = '<option value="">Chwazi kolòn...</option>';
+  document.getElementById('mapToCol').innerHTML = '<option value="">Chwazi kolòn...</option>';
+
+  // Load kolòn yo
+  fromEl.onchange = function() { loadMappingColumns('mapFromCol', fromEl.value); };
+  toEl.onchange = function() { loadMappingColumns('mapToCol', toEl.value); };
+
+  document.getElementById('mappingModal').classList.add('open');
+}
+
+function loadMappingColumns(selectId, connName) {
+  var config = STATE.config;
+  var conn = config.connections.find(function(c) { return c.name === connName; });
+  if (!conn) return;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      var el = document.getElementById(selectId);
+      if (res.ok && res.columns) {
+        el.innerHTML = '<option value="">Chwazi kolòn...</option>';
+        res.columns.forEach(function(c) { el.innerHTML += '<option value="' + c.name.replace(/"/g,'&quot;') + '">' + c.name + '</option>'; });
+      } else {
+        el.innerHTML = '<option value="">— Erè —</option>';
+      }
+    })
+    .listSheetColumns(STATE.token, conn.spreadsheetId, conn.sheetTab);
+}
+
+function handleAddMapping() {
+  var fromConn = document.getElementById('mapFromConn').value;
+  var fromCol = document.getElementById('mapFromCol').value;
+  var toConn = document.getElementById('mapToConn').value;
+  var toCol = document.getElementById('mapToCol').value;
+
+  if (!fromConn || !fromCol || !toConn || !toCol) { toast('Ranpli tout chan yo', 'error'); return; }
+
+  if (!STATE.config.mappings) STATE.config.mappings = [];
+  STATE.config.mappings.push({ fromConn: fromConn, fromColumn: fromCol, toConn: toConn, toColumn: toCol });
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) { toast('Mapping ajoute!', 'success'); closeModal('mappingModal'); loadMappings(); }
+      else { toast(res.error, 'error'); }
+    })
+    .saveFullConfig(STATE.token, STATE.config);
+}
+
+function deleteMapping(idx) {
+  if (!confirm('Efase mapping sa?')) return;
+  STATE.config.mappings.splice(idx, 1);
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) { toast('Mapping efase!', 'success'); loadMappings(); }
+      else { toast(res.error, 'error'); }
+    })
+    .saveFullConfig(STATE.token, STATE.config);
+}
+
+// ═══════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════
+function loadSettings() {
+  var config = STATE.config;
+  var html = '<div class="chart-card">';
+  html += '<h3>📊 State App</h3>';
+  html += '<table style="font-size:14px;">';
+  html += '<tr><td style="font-weight:600;width:160px;">Koneksyon:</td><td>' + (config && config.connections ? config.connections.length : 0) + '</td></tr>';
+  html += '<tr><td style="font-weight:600;">Mappings:</td><td>' + (config && config.mappings ? config.mappings.length : 0) + '</td></tr>';
+  html += '<tr><td style="font-weight:600;">Total Devotions:</td><td>' + (document.querySelector('.stat-card.mauve .stat-number') ? document.querySelector('.stat-card.mauve .stat-number').textContent : '—') + '</td></tr>';
+  html += '</table>';
+
+  html += '<div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">';
+  html += '<button class="btn btn-rouj" onclick="handleResetConfig()">🗑 Reset Konfigirasyon</button>';
+  html += '<button class="btn btn-mauve" onclick="handleReSetup()">⚙️ Re-Konfigire</button>';
+  html += '</div>';
+  html += '</div>';
+
+  document.getElementById('settingsContent').innerHTML = html;
+}
+
+function handleResetConfig() {
+  if (!confirm('Èske ou sèten w vle efase tout konfigirasyon? Sa pral retounen nan ekran setup.')) return;
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        STATE.config = null;
+        document.getElementById('appContainer').style.display = 'none';
+        document.getElementById('setupPage').style.display = 'flex';
+        _setupData = { connections: [], mappings: [] };
+        STATE.setupStep = 1;
+        nextStep(1);
+        toast('Konfigirasyon efase!', 'success');
+      }
+    })
+    .resetConfig(STATE.token);
+}
+
+function handleReSetup() {
+  document.getElementById('appContainer').style.display = 'none';
+  document.getElementById('setupPage').style.display = 'flex';
+  // Pre-ranpli ak config egzistan
+  var config = STATE.config;
+  if (config && config.connections) {
+    if (config.connections[0]) {
+      document.getElementById('s1Name').value = config.connections[0].name || 'Devotionals';
+      document.getElementById('s1Id').value = config.connections[0].spreadsheetId || '';
+      if (config.connections[0].sheetTab) {
+        setTimeout(function() {
+          loadTabs('s1');
+          setTimeout(function() {
+            document.getElementById('s1Tab').value = config.connections[0].sheetTab;
+          }, 1000);
+        }, 100);
+      }
+    }
+    if (config.connections[1]) {
+      document.getElementById('s2Name').value = config.connections[1].name || 'Members';
+      document.getElementById('s2Id').value = config.connections[1].spreadsheetId || '';
+      if (config.connections[1].sheetTab) {
+        setTimeout(function() {
+          loadTabs('s2');
+          setTimeout(function() {
+            document.getElementById('s2Tab').value = config.connections[1].sheetTab;
+          }, 1000);
+        }, 100);
+      }
+    }
+  }
+  _setupData = { connections: (config && config.connections) ? config.connections.slice() : [], mappings: (config && config.mappings) ? config.mappings.slice() : [] };
+  STATE.setupStep = 1;
+  nextStep(1);
+}
+
+// ═══════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+document.addEventListener('click', function(e) {
+  document.querySelectorAll('.modal-overlay.open').forEach(function(el) {
+    if (e.target === el) el.classList.remove('open');
+  });
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && document.getElementById('loginPage').style.display !== 'none') {
+    handleLogin();
+  }
+});
+</script>
+</body>
+</html>
