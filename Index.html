@@ -227,6 +227,8 @@
       <div class="step-dot" id="step3Dot">3</div>
       <div class="step-line" id="step3Line"></div>
       <div class="step-dot" id="step4Dot">4</div>
+      <div class="step-line" id="step4Line"></div>
+      <div class="step-dot" id="step5Dot">5</div>
     </div>
 
     <!-- Step 1: Devotion Sheet -->
@@ -288,26 +290,57 @@
       </div>
     </div>
 
-    <!-- Step 3: Column Mapping -->
+    <!-- Step 3: Users Sheet (optional) -->
     <div class="setup-step" id="step3" style="display:none;">
+      <h3 style="color:var(--rouj);margin-bottom:12px;">👤 Sheet 3 — Itilizatè (Opsyonèl)</h3>
+      <p style="font-size:13px;margin-bottom:16px;">Spreadsheet kote itilizatè yo ye (Email, PIN, Role). Si w pa mete, <strong>admin@jrispace.com</strong> ap sèl moun ki ka konekte.</p>
+      <div class="form-group">
+        <label>Non Koneksyon</label>
+        <input type="text" id="s3Name" value="Users" placeholder="eg: Users">
+      </div>
+      <div class="form-group">
+        <label>Spreadsheet</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="s3Id" placeholder="—" readonly style="background:var(--gray-100);font-size:12px;flex:1;cursor:default;">
+          <button class="btn btn-sm btn-rouj" onclick="openDriveSheetSelector('s3')" style="white-space:nowrap;">📂 Chwazi Sheet</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Tab (Sheet) Non</label>
+        <select id="s3Tab"><option value="">— Chwazi dapre ID anvan —</option></select>
+      </div>
+      <div class="form-group" style="display:flex;gap:12px;">
+        <button class="btn btn-sm btn-outline" onclick="loadTabs('s3')">🔄 Chaje Tabs</button>
+        <button class="btn btn-sm btn-outline" onclick="loadColumns('s3')">📊 Wè Kolòn</button>
+      </div>
+      <div id="s3Columns" style="font-size:12px;color:var(--gray-500);margin-bottom:12px;"></div>
+      <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">💡 Sheet la dwe gen kolòn: <strong>Email</strong>, <strong>PIN</strong>, <strong>Role</strong></p>
+      <div style="display:flex;justify-content:space-between;">
+        <button class="btn btn-outline" onclick="prevStep(2)">← Retou</button>
+        <button class="btn btn-primary" style="width:auto;" onclick="nextStep(4)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Column Mapping -->
+    <div class="setup-step" id="step4" style="display:none;">
       <h3 style="color:var(--green);margin-bottom:12px;">🔗 Column Mapping</h3>
       <p style="font-size:13px;margin-bottom:16px;">Di app la ki kolòn nan yon sheet koresponn ak ki kolòn nan lòt sheet la</p>
       <div id="mappingContainer">
         <p style="text-align:center;color:var(--gray-500);padding:20px;">Ranpli Step 1 ak 2 anvan pou kreye mappings</p>
       </div>
       <div style="display:flex;justify-content:space-between;margin-top:12px;">
-        <button class="btn btn-outline" onclick="prevStep(2)">← Retou</button>
-        <button class="btn btn-primary" style="width:auto;" onclick="nextStep(4)">Next →</button>
+        <button class="btn btn-outline" onclick="prevStep(3)">← Retou</button>
+        <button class="btn btn-primary" style="width:auto;" onclick="nextStep(5)">Next →</button>
       </div>
     </div>
 
-    <!-- Step 4: Review & Save -->
-    <div class="setup-step" id="step4" style="display:none;">
+    <!-- Step 5: Review & Save -->
+    <div class="setup-step" id="step5" style="display:none;">
       <h3 style="color:var(--rouj);margin-bottom:12px;">✅ Review & Anrejistre</h3>
       <p style="font-size:13px;margin-bottom:16px;">Verifye tout bagay anvan w anrejistre</p>
       <div id="reviewContent" style="background:var(--gray-50);padding:16px;border-radius:8px;font-size:13px;margin-bottom:16px;"></div>
       <div style="display:flex;gap:12px;justify-content:flex-end;">
-        <button class="btn btn-outline" onclick="prevStep(3)">← Modifye</button>
+        <button class="btn btn-outline" onclick="prevStep(4)">← Modifye</button>
         <button class="btn btn-primary" style="width:auto;" onclick="handleSaveSetup()">💾 Anrejistre & Kòmanse</button>
       </div>
     </div>
@@ -428,6 +461,7 @@
       <select id="connRole">
         <option value="lookup">Lookup (chèche moun)</option>
         <option value="devotion">Devotion (sheet prensipal)</option>
+        <option value="users">Users (itilizatè app)</option>
         <option value="reference">Referans (done siplemantè)</option>
       </select>
     </div>
@@ -512,6 +546,19 @@ let STATE = {
 };
 let charts = {};
 
+// Auto-login si token nan sessionStorage
+(function() {
+  var savedToken = sessionStorage.getItem('dtToken');
+  var savedEmail = sessionStorage.getItem('dtEmail');
+  if (savedToken && savedEmail) {
+    STATE.token = savedToken;
+    STATE.userEmail = savedEmail;
+    document.getElementById('userBadge').textContent = savedEmail;
+    document.getElementById('loginPage').style.display = 'none';
+    checkDriveAccess();
+  }
+})();
+
 // ═══════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════
@@ -527,6 +574,8 @@ function handleLogin() {
       if (res.ok) {
         STATE.token = res.token;
         STATE.userEmail = email;
+        sessionStorage.setItem('dtToken', res.token);
+        sessionStorage.setItem('dtEmail', email);
         document.getElementById('userBadge').textContent = email;
         document.getElementById('loginPage').style.display = 'none';
         document.getElementById('permPage').style.display = 'flex';
@@ -557,7 +606,7 @@ function checkDriveAccess() {
         checkConfig();
       } else if (res.authUrl) {
         document.getElementById('permStatus').textContent = '❌ Pemisyon Drive manke';
-        document.getElementById('permActions').innerHTML = '<p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Klike bouton an pou otorize Drive nan yon nouvo tab. Apre otorizasyon an, retounen isit epi rafrechi.</p><button class="btn btn-primary" onclick="window.open(\'' + res.authUrl + '\',\'_blank\')">✅ Otorize Aksè Drive</button><br><br><button class="btn btn-outline" onclick="window.top.location.reload()">🔄 Rafrechi apre otorizasyon</button>';
+        document.getElementById('permActions').innerHTML = '<p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Klike bouton an pou otorize Drive nan yon nouvo tab. Apre otorizasyon an, fèmen tab la epi rafrechi isit la.</p><button class="btn btn-primary" onclick="window.open(\'' + res.authUrl + '\',\'_blank\')">✅ Otorize Aksè Drive</button><br><br><button class="btn btn-outline" onclick="window.location.href=window.location.href">🔄 Rafrechi</button>';
         document.getElementById('permActions').style.display = 'block';
       } else {
         document.getElementById('permStatus').textContent = '❌ Pemisyon Drive manke';
@@ -574,11 +623,15 @@ function checkDriveAccess() {
     .getDriveAuthUrl();
 }
 
+function handleLogout() {
+
 
 function handleLogout() {
   google.script.run
     .withSuccessHandler(function() {
       STATE.token = null; STATE.config = null;
+      sessionStorage.removeItem('dtToken');
+      sessionStorage.removeItem('dtEmail');
       document.getElementById('appContainer').style.display = 'none';
       document.getElementById('setupPage').style.display = 'none';
       document.getElementById('permPage').style.display = 'none';
@@ -615,12 +668,13 @@ let _setupData = { connections: [], mappings: [] };
 function nextStep(n) {
   if (n === 2 && !validateStep1()) return;
   if (n === 3 && !validateStep2()) return;
-  if (n === 4) buildReview();
+  if (n === 4 && !validateStep3()) return;
+  if (n === 5) buildReview();
 
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= 5; i++) {
     document.getElementById('step' + i).style.display = i === n ? 'block' : 'none';
     document.getElementById('step' + i + 'Dot').className = i < n ? 'step-dot done' : (i === n ? 'step-dot active' : 'step-dot');
-    if (i < 4) document.getElementById('step' + i + 'Line').className = i < n ? 'step-line done' : 'step-line';
+    if (i < 5) document.getElementById('step' + i + 'Line').className = i < n ? 'step-line done' : 'step-line';
   }
   STATE.setupStep = n;
 }
@@ -652,6 +706,19 @@ function validateStep2() {
   };
   // Chaje kolòn pou step 3
   buildMappingUI();
+  return true;
+}
+
+function validateStep3() {
+  const id = _getSheetId('s3');
+  // Opsyonèl — si pa gen ID, ignore
+  if (!id) return true;
+  _setupData.connections[2] = {
+    name: document.getElementById('s3Name').value.trim() || 'Users',
+    role: 'users',
+    spreadsheetId: id,
+    sheetTab: document.getElementById('s3Tab').value,
+  };
   return true;
 }
 
@@ -762,12 +829,13 @@ function buildMappingUI() {
     });
   };
 
-  // Si kolòn deja konekte, itilize yo
-  if (_setupData.connections.length >= 2) {
-    loadAndShow();
-  } else {
+// Skip si pa gen 2 sheets
+  if (_setupData.connections.length < 2) {
     container.innerHTML = '<p style="text-align:center;color:var(--gray-500);padding:20px;">Ranpli Step 1 ak 2 anvan pou kreye mappings</p>';
+    return;
   }
+
+  loadAndShow();
 }
 
 function buildReview() {
@@ -790,6 +858,7 @@ function buildReview() {
 
   const s1 = _setupData.connections[0];
   const s2 = _setupData.connections[1];
+  const s3 = _setupData.connections[2];
 
   let html = '<div style="margin-bottom:12px;"><strong style="color:var(--mauve);">📋 Devotion Sheet:</strong><br>';
   html += 'Non: ' + s1.name + '<br>';
@@ -800,6 +869,13 @@ function buildReview() {
   html += 'Non: ' + s2.name + '<br>';
   html += 'ID: <code style="font-size:11px;">' + s2.spreadsheetId + '</code><br>';
   html += 'Tab: ' + (s2.sheetTab || 'Premye tab') + '</div>';
+
+  if (s3 && s3.spreadsheetId) {
+    html += '<div style="margin-bottom:12px;"><strong style="color:var(--rouj);">👤 Users Sheet:</strong><br>';
+    html += 'Non: ' + s3.name + '<br>';
+    html += 'ID: <code style="font-size:11px;">' + s3.spreadsheetId + '</code><br>';
+    html += 'Tab: ' + (s3.sheetTab || 'Premye tab') + '</div>';
+  }
 
   if (maps.length > 0) {
     html += '<div style="margin-bottom:12px;"><strong style="color:var(--green);">🔗 Mappings:</strong></div>';
@@ -813,6 +889,7 @@ function buildReview() {
 
 function handleSaveSetup() {
   // Ranmase vèsyon final la
+  validateStep3(); // asire s3 nan _setupData
   buildReview();
 
   const config = {
@@ -1617,6 +1694,19 @@ function handleReSetup() {
           loadTabs('s2');
           setTimeout(function() {
             document.getElementById('s2Tab').value = c1.sheetTab;
+          }, 1000);
+        }, 100);
+      }
+    }
+    if (config.connections[2]) {
+      document.getElementById('s3Name').value = config.connections[2].name || 'Users';
+      var c2 = config.connections[2];
+      document.getElementById('s3Id').value = c2.spreadsheetId ? c2.name + '  (' + c2.spreadsheetId + ')' : '';
+      if (c2.sheetTab) {
+        setTimeout(function() {
+          loadTabs('s3');
+          setTimeout(function() {
+            document.getElementById('s3Tab').value = c2.sheetTab;
           }, 1000);
         }, 100);
       }

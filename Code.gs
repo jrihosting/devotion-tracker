@@ -515,7 +515,7 @@ function lookupByPhone(token, phone) {
   const results = [];
 
   for (const conn of (config.connections || [])) {
-    if (conn.role === 'devotion') continue; // Sote sheet devotion prensipal la
+    if (conn.role === 'devotion' || conn.role === 'users') continue; // Sote sheet devotion prensipal la
     const headers = _getCachedHeaders(conn);
     const rows = _getCachedRows(conn);
 
@@ -628,7 +628,7 @@ function getDashboardStats(token) {
   // Total members across all connections (except devotion)
   let totalMembers = 0;
   for (const conn of (config.connections || [])) {
-    if (conn.role === 'devotion') continue;
+    if (conn.role === 'devotion' || conn.role === 'users') continue;
     try {
       const s = _openDynamicSheet(conn);
       totalMembers += Math.max(0, s.getLastRow() - 1);
@@ -718,7 +718,7 @@ function getMembersList(token) {
   const allMembers = [];
 
   for (const conn of (config.connections || [])) {
-    if (conn.role === 'devotion') continue;
+    if (conn.role === 'devotion' || conn.role === 'users') continue;
     try {
       const headers = _getCachedHeaders(conn);
       const rows = _getCachedRows(conn);
