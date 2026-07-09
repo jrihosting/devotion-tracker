@@ -569,8 +569,7 @@ function checkDriveAccess() {
 }
 
 function authorizeDriveAccess() {
-  // Redireksyon sou URL app la — Google pral mande otorizasyon Drive
-  window.location.reload();
+  window.top.location.href = window.location.href;
 }
 
 function handleLogout() {
