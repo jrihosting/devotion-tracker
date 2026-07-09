@@ -186,7 +186,7 @@
     <p id="permStatus" style="font-size:14px;color:var(--gray-500);margin-bottom:20px;">Verifikasyon...</p>
     <div id="permActions" style="display:none;">
       <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">App la bezwen aksè Drive pou chèche spreadsheet ou yo. Klike bouton an pou otorize.</p>
-      <button class="btn btn-primary" onclick="authorizeDriveAccess()">✅ Otorize Aksè Drive</button>
+      <button class="btn btn-primary" onclick="window.top.location.href=window.location.href">✅ Otorize Aksè Drive</button>
     </div>
     <div id="permLoading" style="display:block;">
       <div class="spinner" style="border:4px solid var(--gray-200);border-top-color:var(--mauve);width:40px;height:40px;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div>
@@ -555,22 +555,25 @@ function checkDriveAccess() {
       if (res.ok) {
         document.getElementById('permPage').style.display = 'none';
         checkConfig();
+      } else if (res.authUrl) {
+        document.getElementById('permStatus').textContent = '❌ Pemisyon Drive manke';
+        document.getElementById('permActions').innerHTML = '<p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Klike bouton an pou otorize Drive nan yon nouvo tab. Apre otorizasyon an, retounen isit epi rafrechi.</p><button class="btn btn-primary" onclick="window.open(\'' + res.authUrl + '\',\'_blank\')">✅ Otorize Aksè Drive</button><br><br><button class="btn btn-outline" onclick="window.top.location.reload()">🔄 Rafrechi apre otorizasyon</button>';
+        document.getElementById('permActions').style.display = 'block';
       } else {
         document.getElementById('permStatus').textContent = '❌ Pemisyon Drive manke';
+        document.getElementById('permActions').innerHTML = '<button class="btn btn-primary" onclick="window.top.location.href=window.location.href">✅ Otorize Aksè Drive</button>';
         document.getElementById('permActions').style.display = 'block';
       }
     })
     .withFailureHandler(function(err) {
       document.getElementById('permLoading').style.display = 'none';
       document.getElementById('permStatus').textContent = '❌ Pemisyon Drive manke';
+      document.getElementById('permActions').innerHTML = '<button class="btn btn-primary" onclick="window.top.location.href=window.location.href">✅ Otorize Aksè Drive</button>';
       document.getElementById('permActions').style.display = 'block';
     })
-    .checkDrivePermissions();
+    .getDriveAuthUrl();
 }
 
-function authorizeDriveAccess() {
-  window.top.location.href = window.location.href;
-}
 
 function handleLogout() {
   google.script.run

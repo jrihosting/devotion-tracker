@@ -379,12 +379,22 @@ function clearCache() {
 // ──────────────────────────────────────────────
 // CHECK PERMISSIONS — fòse otorizasyon Drive
 // ──────────────────────────────────────────────
-function checkDrivePermissions() {
+function getDriveAuthUrl() {
+  const info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+  const status = info.getAuthorizationStatus();
+  if (status === ScriptApp.AuthorizationStatus.REQUIRED) {
+    return { ok: false, authUrl: info.getAuthorizationUrl() };
+  }
+  return { ok: true };
+}
+
+function getDriveAuthUrl() {
   try {
     DriveApp.getRootFolder();
-    return { ok: true };
+    return { ok: true, authorized: true };
   } catch (e) {
-    return { ok: false, needsAuth: true, error: e.message };
+    const info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+    return { ok: false, authorized: false, authUrl: info.getAuthorizationUrl() };
   }
 }
 
