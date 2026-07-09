@@ -624,9 +624,6 @@ function checkDriveAccess() {
 }
 
 function handleLogout() {
-
-
-function handleLogout() {
   google.script.run
     .withSuccessHandler(function() {
       STATE.token = null; STATE.config = null;
