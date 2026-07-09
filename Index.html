@@ -540,6 +540,7 @@ let STATE = {
   config: null,
   devotionHeaders: [], devotionRows: [],
   currentPage: 0, pageSize: 25, searchTerm: '',
+  totalRows: 0,
   sortCol: null, sortDir: 'asc',
   currentPageName: 'dashboard',
   setupStep: 1,
@@ -1040,52 +1041,51 @@ function renderChart(id, type, labels, data, indexAxis, bgColors) {
 // TRACKER
 // ═══════════════════════════════════════════
 function loadTracker() {
+  var opts = {
+    page: STATE.currentPage,
+    pageSize: STATE.pageSize,
+    search: STATE.searchTerm || '',
+    sortCol: STATE.sortCol,
+    sortDir: STATE.sortDir,
+  };
   google.script.run
     .withSuccessHandler(function(res) {
       if (!res.ok && res.needsSetup) { document.getElementById('trackerContent').innerHTML = '<p style="text-align:center;padding:40px;color:var(--gray-500);">Pa gen konfigirasyon. Ale nan Koneksyon pou kòmanse.</p>'; return; }
       if (!res.ok) { document.getElementById('trackerContent').innerHTML = '<p style="color:var(--rouj)">Erè: ' + res.error + '</p>'; return; }
       STATE.devotionHeaders = res.headers || [];
       STATE.devotionRows = res.rows || [];
+      STATE.totalRows = res.total || 0;
       renderTracker();
     })
     .withFailureHandler(function(err) { document.getElementById('trackerContent').innerHTML = '<p style="color:var(--rouj)">Erè: ' + err.message + '</p>'; })
-    .getTrackerData(STATE.token);
+    .getTrackerData(STATE.token, opts);
 }
 
 function renderTracker() {
   var headers = STATE.devotionHeaders;
-  var allRows = STATE.devotionRows;
-  var term = STATE.searchTerm.toLowerCase();
-  var filtered = term ? allRows.filter(function(r) { return headers.some(function(h) { return String(r[h]||'').toLowerCase().includes(term); }); }) : allRows;
-
-  if (STATE.sortCol) {
-    filtered.sort(function(a, b) {
-      var av = String(a[STATE.sortCol]||''), bv = String(b[STATE.sortCol]||'');
-      return STATE.sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-    });
-  }
-
-  var totalPages = Math.ceil(filtered.length / STATE.pageSize) || 1;
-  var page = Math.min(STATE.currentPage, totalPages - 1);
-  var pageRows = filtered.slice(page * STATE.pageSize, (page + 1) * STATE.pageSize);
+  var rows = STATE.devotionRows;
+  var total = STATE.totalRows;
 
   var showCols = headers.filter(function(h) {
     return !h.toUpperCase().startsWith('COLUMN') && !h.includes('Duplicate') && !h.includes('CLEAN PHONE');
   });
   if (showCols.length > 8) showCols.length = 8;
 
+  var totalPages = Math.ceil(total / STATE.pageSize) || 1;
+  var page = Math.min(STATE.currentPage, totalPages - 1);
+
   var html = '<div class="table-toolbar">';
-  html += '<input type="search" placeholder="Chèche..." value="' + STATE.searchTerm + '" oninput="STATE.searchTerm=this.value;STATE.currentPage=0;renderTracker()">';
+  html += '<input type="search" placeholder="Chèche..." value="' + STATE.searchTerm + '" oninput="STATE.searchTerm=this.value;STATE.currentPage=0;loadTracker()">';
   html += '<button class="btn btn-sm btn-mauve" onclick="openLookupModal()">🔍 Chèche Moun</button>';
-  html += '<span style="font-size:13px;color:var(--gray-500);">' + filtered.length + ' antre</span></div>';
+  html += '<span style="font-size:13px;color:var(--gray-500);">' + total + ' antre</span></div>';
   html += '<div class="table-wrap"><table><thead><tr>';
   showCols.forEach(function(h) { html += '<th onclick="sortBy(\'' + h.replace(/'/g,"\\'") + '\')">' + h + ' ' + (STATE.sortCol === h ? (STATE.sortDir === 'asc' ? '▲' : '▼') : '') + '</th>'; });
   html += '<th style="width:100px;">Aksyon</th></tr></thead><tbody>';
 
-  if (pageRows.length === 0) {
+  if (rows.length === 0) {
     html += '<tr><td colspan="' + (showCols.length + 1) + '" style="text-align:center;padding:40px;color:var(--gray-500);">Pa gen devotion ankò</td></tr>';
   } else {
-    pageRows.forEach(function(row) {
+    rows.forEach(function(row) {
       html += '<tr>';
       showCols.forEach(function(h) { html += '<td title="' + (row[h]||'') + '">' + (row[h]||'') + '</td>'; });
       html += '<td><button class="btn btn-sm btn-bleu" onclick="openEditModal(' + row._row + ')" style="padding:4px 8px;font-size:11px;">Edit</button> ';
@@ -1096,11 +1096,11 @@ function renderTracker() {
   html += '</tbody></table></div>';
 
   html += '<div class="pagination">';
-  html += '<button ' + (page === 0 ? 'disabled' : '') + ' onclick="STATE.currentPage=0;renderTracker()">««</button>';
-  html += '<button ' + (page === 0 ? 'disabled' : '') + ' onclick="STATE.currentPage=Math.max(0,' + (page-1) + ');renderTracker()">«</button>';
+  html += '<button ' + (page === 0 ? 'disabled' : '') + ' onclick="STATE.currentPage=0;loadTracker()">««</button>';
+  html += '<button ' + (page === 0 ? 'disabled' : '') + ' onclick="STATE.currentPage=Math.max(0,' + (page-1) + ');loadTracker()">«</button>';
   html += '<span style="font-size:13px;color:var(--gray-500);padding:0 12px;">Paj ' + (page+1) + ' / ' + totalPages + '</span>';
-  html += '<button ' + (page >= totalPages-1 ? 'disabled' : '') + ' onclick="STATE.currentPage=Math.min(' + (totalPages-1) + ',' + (page+1) + ');renderTracker()">»</button>';
-  html += '<button ' + (page >= totalPages-1 ? 'disabled' : '') + ' onclick="STATE.currentPage=' + (totalPages-1) + ';renderTracker()">»»</button>';
+  html += '<button ' + (page >= totalPages-1 ? 'disabled' : '') + ' onclick="STATE.currentPage=Math.min(' + (totalPages-1) + ',' + (page+1) + ');loadTracker()">»</button>';
+  html += '<button ' + (page >= totalPages-1 ? 'disabled' : '') + ' onclick="STATE.currentPage=' + (totalPages-1) + ';loadTracker()">»»</button>';
   html += '</div>';
 
   document.getElementById('trackerContent').innerHTML = html;
@@ -1109,7 +1109,7 @@ function renderTracker() {
 function sortBy(col) {
   if (STATE.sortCol === col) { STATE.sortDir = STATE.sortDir === 'asc' ? 'desc' : 'asc'; }
   else { STATE.sortCol = col; STATE.sortDir = 'asc'; }
-  renderTracker();
+  loadTracker();
 }
 
 // ═══════════════════════════════════════════

@@ -228,7 +228,7 @@ function resetConfig(token) {
 // ──────────────────────────────────────────────
 // CACHE LAYER — CacheService pou akselere
 // ──────────────────────────────────────────────
-const CACHE_TTL = 30; // segond
+const CACHE_TTL = 300; // 5 minit (pi bon pase 30s pou gwo done)
 
 function _cacheKey(conn, kind) {
   return `dt_${conn.spreadsheetId}_${conn.sheetTab || '_default'}_${kind}`;
@@ -239,17 +239,26 @@ function _cacheGet(key) {
     const cache = CacheService.getScriptCache();
     const raw = cache.get(key);
     if (raw) return JSON.parse(raw);
+    // Retry via PropertiesService (pou gwo data)
+    const props = PropertiesService.getScriptProperties();
+    const fallback = props.getProperty(key);
+    if (fallback) return JSON.parse(fallback);
   } catch (e) { /* ignore cache errors */ }
   return null;
 }
 
 function _cachePut(key, data, ttl) {
   try {
-    const cache = CacheService.getScriptCache();
     const json = JSON.stringify(data);
-    if (json.length < 95000) { // CacheService limit ~100KB
-      cache.put(key, json, ttl || CACHE_TTL);
+    const expiry = ttl || CACHE_TTL;
+    // CacheService — rapid, limite a ~100KB
+    if (json.length < 95000) {
+      const cache = CacheService.getScriptCache();
+      cache.put(key, json, expiry);
     }
+    // PropertiesService — pi dousman, men 500KB disponib
+    const props = PropertiesService.getScriptProperties();
+    props.setProperty(key, json);
   } catch (e) { /* ignore cache errors */ }
 }
 
@@ -414,7 +423,7 @@ function _findConnByName(config, name) {
 // ──────────────────────────────────────────────
 // TRACKER — Read (dinamik selon konfigirasyon)
 // ──────────────────────────────────────────────
-function getTrackerData(token) {
+function getTrackerData(token, opts) {
   if (!verifyToken(token)) throw new Error('Unauthorized');
   const config = getAppConfig();
   if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
@@ -428,12 +437,44 @@ function getTrackerData(token) {
   const colMap = {};
   headers.forEach((h, i) => { colMap[h.trim().toUpperCase()] = i; });
 
+  opts = opts || {};
+  const page = Math.max(0, opts.page || 0);
+  const pageSize = Math.min(100, Math.max(1, opts.pageSize || 25));
+
+  // Filtre rechèch (server-side)
+  let filtered = rows;
+  if (opts.search) {
+    const term = opts.search.toLowerCase();
+    filtered = rows.filter(function(r) {
+      return headers.some(function(h) {
+        return String(r[h] || '').toLowerCase().includes(term);
+      });
+    });
+  }
+
+  // Tri (server-side)
+  if (opts.sortCol && headers.indexOf(opts.sortCol) >= 0) {
+    var col = opts.sortCol;
+    var dir = opts.sortDir === 'desc' ? -1 : 1;
+    filtered.sort(function(a, b) {
+      var av = String(a[col] || '').toLowerCase();
+      var bv = String(b[col] || '').toLowerCase();
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  }
+
+  var total = filtered.length;
+  var start = page * pageSize;
+  var sliced = filtered.slice(start, start + pageSize);
+
   return {
     ok: true,
-    headers,
-    rows,
-    colMap,
-    total: rows.length,
+    headers: headers,
+    rows: sliced,
+    colMap: colMap,
+    total: total,
+    page: page,
+    pageSize: pageSize,
     connection: devotionConn,
   };
 }
@@ -738,7 +779,6 @@ function getMembersList(token) {
           name: nameCol ? r[nameCol] : '',
           phone: phoneCol ? r[phoneCol] : '',
           conn: conn.name,
-          data: r,
         });
       });
     } catch (e) { /* skip problematic connections */ }
