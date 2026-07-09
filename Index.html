@@ -362,7 +362,8 @@
     <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
     <nav class="sidebar" id="sidebar">
       <a href="#" class="active" onclick="showPage('dashboard',this)"><span>📊</span> Dashboard</a>
-      <a href="#" onclick="showPage('tracker',this)"><span>🙏</span> Tracker</a>
+      <a href="#" onclick="showPage('devotionals',this)"><span>🙏</span> Devotionals</a>
+      <a href="#" onclick="showPage('tracker',this)"><span>📋</span> Tracker</a>
       <a href="#" onclick="showPage('members',this)"><span>👥</span> Membres</a>
       <a href="#" onclick="showPage('connections',this)"><span>🔌</span> Koneksyon</a>
       <a href="#" onclick="showPage('mappings',this)"><span>🔗</span> Mapping</a>
@@ -377,10 +378,16 @@
         <div id="dashboardContent"><div class="loading"><div class="spinner"></div>Chajman...</div></div>
       </div>
 
+      <!-- DEVOTIONALS -->
+      <div class="page" id="pageDevotionals">
+        <div class="page-header"><h2>🙏 Devotionals</h2><p>Tout devotions yo</p></div>
+        <div id="devotionalsContent"><div class="loading"><div class="spinner"></div>Chajman...</div></div>
+      </div>
+
       <!-- TRACKER -->
       <div class="page" id="pageTracker">
         <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div><h2>🙏 Tracker Devotion</h2><p>Gere tout devotions ou yo</p></div>
+          <div><h2>📋 Tracker Devotion</h2><p>Gere tout devotions ou yo</p></div>
           <button class="btn btn-primary" onclick="openAddModal()" style="width:auto;">+ Nouvo Devotion</button>
         </div>
         <div id="trackerContent"><div class="loading"><div class="spinner"></div>Chajman...</div></div>
@@ -938,6 +945,7 @@ function showPage(name, el) {
   if (window.innerWidth <= 768) toggleSidebar();
 
   if (name === 'dashboard') loadDashboard();
+  else if (name === 'devotionals') loadDevotionals();
   else if (name === 'tracker') loadTracker();
   else if (name === 'members') loadMembers();
   else   if (name === 'connections') loadConnections();
@@ -1332,6 +1340,58 @@ function renderMembers() {
   }
   html += '</div>';
   document.getElementById('membersContent').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════
+// DEVOTIONALS
+// ═══════════════════════════════════════════
+function loadDevotionals() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res.ok && res.needsSetup) { document.getElementById('devotionalsContent').innerHTML = '<p style="text-align:center;padding:40px;color:var(--gray-500);">Pa gen konfigirasyon</p>'; return; }
+      if (!res.ok) { document.getElementById('devotionalsContent').innerHTML = '<p style="color:var(--rouj)">Erè</p>'; return; }
+      STATE.devotionals = res.devotionals || [];
+      renderDevotionals();
+    })
+    .withFailureHandler(function(err) { document.getElementById('devotionalsContent').innerHTML = '<p style="color:var(--rouj)">Erè: ' + err.message + '</p>'; })
+    .getDevotionalsList(STATE.token);
+}
+
+function renderDevotionals() {
+  var items = STATE.devotionals;
+  if (items.length === 0) {
+    document.getElementById('devotionalsContent').innerHTML = '<p style="text-align:center;padding:40px;color:var(--gray-500);">Pa gen devotion ankò</p>';
+    return;
+  }
+
+  // Gwoupe pa mwa
+  var byMonth = {};
+  items.forEach(function(d) {
+    var key = d.month || 'Unknown';
+    if (!byMonth[key]) byMonth[key] = [];
+    byMonth[key].push(d);
+  });
+
+  var months = Object.keys(byMonth).sort().reverse();
+  var html = '<div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;">';
+  html += '<p style="margin-bottom:12px;color:var(--gray-500);">' + items.length + ' devotion total</p>';
+
+  months.forEach(function(month) {
+    html += '<div style="margin-top:16px;"><h4 style="color:var(--mauve);font-size:14px;margin-bottom:8px;">📅 ' + month + ' (' + byMonth[month].length + ')</h4>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">';
+    byMonth[month].forEach(function(d) {
+      html += '<div style="padding:14px;border:1px solid var(--gray-200);border-radius:var(--radius-sm);">';
+      html += '<div style="font-weight:600;color:var(--mauve);">' + (d.name || 'Anonim') + '</div>';
+      html += '<div style="font-size:12px;color:var(--gray-500);margin-top:4px;">📅 ' + (d.date || '') + '</div>';
+      if (d.campus) html += '<div style="font-size:12px;color:var(--gray-500);">🏫 ' + d.campus + '</div>';
+      if (d.ministry) html += '<div style="font-size:12px;color:var(--gray-500);">⛪ ' + d.ministry + '</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+  document.getElementById('devotionalsContent').innerHTML = html;
 }
 
 // ═══════════════════════════════════════════

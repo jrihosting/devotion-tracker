@@ -643,6 +643,56 @@ function lookupByPhone(token, phone) {
 }
 
 // ──────────────────────────────────────────────
+// DEVOTIONALS — card view similar to members
+// ──────────────────────────────────────────────
+function getDevotionalsList(token) {
+  if (!verifyToken(token)) throw new Error('Unauthorized');
+  const config = getAppConfig();
+  if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
+
+  const devotionConn = _findConnByRole(config, 'devotion');
+  if (!devotionConn) return { ok: false, error: 'Pa gen koneksyon devotion', needsSetup: true };
+
+  const headers = _getCachedHeaders(devotionConn);
+  const rows = _getCachedRows(devotionConn);
+
+  const dateCol = headers.find(h => h.toUpperCase().includes('DATE'));
+  const nameCol = headers.find(h =>
+    h.toUpperCase().includes('FULL NAME') || h.toUpperCase().includes('REPORTER') ||
+    h.toUpperCase().includes('FIRST NAME')
+  ) || headers[0];
+  const campusCol = headers.find(h => h.toUpperCase().includes('CAMPUS'));
+  const ministryCol = headers.find(h => h.toUpperCase().includes('MINISTRY'));
+
+  const devotionals = rows.map(r => {
+    const dateRaw = dateCol ? r[dateCol] : null;
+    let dateStr = '';
+    let month = '';
+    if (dateRaw) {
+      if (typeof dateRaw === 'string') {
+        dateStr = dateRaw;
+        try {
+          const p = dateRaw.split(/[\/\-]/);
+          if (p.length === 3) month = p[2] + '-' + p[0].padStart(2, '0');
+        } catch(e) {}
+      } else if (dateRaw instanceof Date) {
+        dateStr = Utilities.formatDate(dateRaw, Session.getScriptTimeZone(), 'MM/dd/yyyy');
+        month = Utilities.formatDate(dateRaw, Session.getScriptTimeZone(), "yyyy-MM");
+      }
+    }
+    return {
+      name: nameCol ? r[nameCol] || '' : '',
+      date: dateStr,
+      month: month,
+      campus: campusCol ? r[campusCol] || '' : '',
+      ministry: ministryCol ? r[ministryCol] || '' : '',
+    };
+  });
+
+  return { ok: true, devotionals };
+}
+
+// ──────────────────────────────────────────────
 // DASHBOARD — Stats dinamik
 // ──────────────────────────────────────────────
 function getDashboardStats(token) {
