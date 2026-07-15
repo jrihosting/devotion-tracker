@@ -309,8 +309,12 @@ function saveFullConfig(token, config) {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
+    const oldConfig = getAppConfig();
     saveAppConfig(config);
+    _clearConfiguredCaches(oldConfig);
+    _clearConfiguredCaches(config);
     _clearMembersCache();
+    _bumpDataVersion('config');
     return { ok: true, message: 'Konfigirasyon anrejistre!' };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -324,9 +328,12 @@ function resetConfig(token) {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
+    const oldConfig = getAppConfig();
     const props = PropertiesService.getScriptProperties();
     props.deleteProperty(CONFIG.CONFIG_KEY);
+    _clearConfiguredCaches(oldConfig);
     _clearMembersCache();
+    _bumpDataVersion('config_reset');
     return { ok: true, message: 'Konfigirasyon efase!' };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -341,6 +348,8 @@ function resetConfig(token) {
 const CACHE_TTL = 21600; // 6 hours; Apps Script CacheService max TTL
 const CACHE_VERSION = 'v5';
 const MEMBERS_CACHE_KEY = 'dt_v5_members_list'; // 6-hour cache for getMembersList result
+const DATA_VERSION_KEY = 'dt_v5_data_version';
+const DATA_MANIFEST_KEY = 'dt_v5_data_manifest';
 
 function _cacheKey(conn, kind) {
   return `dt_${CACHE_VERSION}_${conn.spreadsheetId}_${conn.sheetTab || '_default'}_${kind}`;
@@ -396,34 +405,182 @@ function _cachePut(key, data, ttl) {
   } catch (e) { /* ignore cache errors */ }
 }
 
+function _cacheRemoveKeys(keys) {
+  try {
+    const unique = [];
+    const seen = {};
+    (keys || []).forEach(function(key) {
+      if (key && !seen[key]) {
+        seen[key] = true;
+        unique.push(key);
+      }
+    });
+    if (!unique.length) return;
+
+    const cache = CacheService.getScriptCache();
+    for (var i = 0; i < unique.length; i += 100) {
+      const chunk = unique.slice(i, i + 100);
+      try {
+        cache.removeAll(chunk);
+      } catch (e) {
+        chunk.forEach(function(key) {
+          try { cache.remove(key); } catch (ignore) {}
+        });
+      }
+    }
+
+    const props = PropertiesService.getScriptProperties();
+    unique.forEach(function(key) {
+      try { props.deleteProperty(key); } catch (ignore) {}
+    });
+  } catch (e) { /* ignore */ }
+}
+
 function _cacheRemove(conn) {
   try {
-    const cache = CacheService.getScriptCache();
-    const props = PropertiesService.getScriptProperties();
-    const keys = ['headers', 'rows', 'rows_all', 'rows_1', 'rows_25', 'rows_50', 'rows_100', 'rows_500'];
-    keys.forEach(function(kind) {
-      const key = _cacheKey(conn, kind);
-      cache.remove(key);
-      props.deleteProperty(key);
-    });
+    _clearPhoneLookupCache(conn);
+    const kinds = ['headers', 'rows', 'rows_all', 'rows_1', 'rows_25', 'rows_50', 'rows_100', 'rows_500', 'phone_lookup_meta'];
+    const keys = kinds.map(function(kind) { return _cacheKey(conn, kind); });
+    _cacheRemoveKeys(keys);
   } catch (e) { /* ignore */ }
 }
 
 function _clearMembersCache() {
   try {
-    const cache = CacheService.getScriptCache();
-    const props = PropertiesService.getScriptProperties();
-    cache.remove(MEMBERS_CACHE_KEY);
-    cache.remove('dt_v4_members_list');
-    cache.remove('dt_v3_members_list');
-    cache.remove('dt_v2_members_list');
-    cache.remove('dt_members_list');
-    props.deleteProperty(MEMBERS_CACHE_KEY);
-    props.deleteProperty('dt_v4_members_list');
-    props.deleteProperty('dt_v3_members_list');
-    props.deleteProperty('dt_v2_members_list');
-    props.deleteProperty('dt_members_list');
+    _cacheRemoveKeys([
+      MEMBERS_CACHE_KEY,
+      'dt_v4_members_list',
+      'dt_v3_members_list',
+      'dt_v2_members_list',
+      'dt_members_list',
+    ]);
   } catch(e) { /* ignore */ }
+}
+
+function _clearConfiguredCaches(config) {
+  try {
+    _clearMembersCache();
+    _cacheRemoveKeys([DATA_MANIFEST_KEY]);
+    (config && config.connections || []).forEach(function(conn) {
+      _cacheRemove(conn);
+    });
+  } catch(e) { /* ignore */ }
+}
+
+function _clearAllDataCaches() {
+  try {
+    _clearConfiguredCaches(getAppConfig());
+    const props = PropertiesService.getScriptProperties();
+    const dtKeys = props.getKeys().filter(function(key) {
+      return key.indexOf('dt_') === 0 && key !== DATA_VERSION_KEY;
+    });
+    _cacheRemoveKeys(dtKeys);
+  } catch(e) { /* ignore */ }
+}
+
+function _getDataVersion() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    let version = props.getProperty(DATA_VERSION_KEY);
+    if (!version) {
+      version = String(Date.now());
+      props.setProperty(DATA_VERSION_KEY, version);
+    }
+    return version;
+  } catch(e) {
+    return String(Date.now());
+  }
+}
+
+function _bumpDataVersion(reason) {
+  try {
+    const version = Date.now() + ':' + (reason || 'data');
+    PropertiesService.getScriptProperties().setProperty(DATA_VERSION_KEY, version);
+    _cacheRemoveKeys([DATA_MANIFEST_KEY]);
+    return version;
+  } catch(e) {
+    return String(Date.now());
+  }
+}
+
+function _connectionSignature(conn) {
+  const sig = {
+    name: conn.name || '',
+    role: conn.role || '',
+    spreadsheetId: conn.spreadsheetId || '',
+    sheetTab: conn.sheetTab || '',
+    sheetName: '',
+    lastRow: 0,
+    lastColumn: 0,
+    lastUpdated: 0,
+    error: '',
+  };
+
+  try {
+    const sheet = _openDynamicSheet(conn);
+    sig.sheetName = sheet.getName();
+    sig.lastRow = sheet.getLastRow();
+    sig.lastColumn = sheet.getLastColumn();
+  } catch(e) {
+    sig.error = e.message;
+  }
+
+  try {
+    sig.lastUpdated = DriveApp.getFileById(conn.spreadsheetId).getLastUpdated().getTime();
+  } catch(e) {
+    sig.lastUpdated = 0;
+  }
+
+  sig.key = [
+    sig.role,
+    sig.spreadsheetId,
+    sig.sheetTab,
+    sig.lastRow,
+    sig.lastColumn,
+    sig.lastUpdated,
+    sig.error,
+  ].join(':');
+  return sig;
+}
+
+function getDataManifest(token) {
+  if (!verifyToken(token)) throw new Error('Unauthorized');
+  const config = getAppConfig();
+  if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
+
+  const signatures = (config.connections || []).map(function(conn) {
+    return _connectionSignature(conn);
+  });
+  const devotionSig = signatures.filter(function(sig) { return sig.role === 'devotion'; });
+  const memberSigs = signatures.filter(function(sig) { return sig.role !== 'devotion' && sig.role !== 'users'; });
+  const userSigs = signatures.filter(function(sig) { return sig.role === 'users'; });
+  const dataVersion = _getDataVersion();
+  const base = CACHE_VERSION + ':' + dataVersion + ':';
+  const devotionKey = devotionSig.map(function(sig) { return sig.key; }).join('|');
+  const membersKey = memberSigs.map(function(sig) { return sig.key; }).join('|');
+  const usersKey = userSigs.map(function(sig) { return sig.key; }).join('|');
+
+  return {
+    ok: true,
+    cacheVersion: CACHE_VERSION,
+    ttlSeconds: CACHE_TTL,
+    generatedAt: Date.now(),
+    dataVersion,
+    signatures: {
+      devotion: devotionSig,
+      members: memberSigs,
+      users: userSigs,
+      connections: signatures,
+    },
+    keys: {
+      dashboard: base + 'dashboard:' + devotionKey + ':' + membersKey + ':' + usersKey,
+      tracker: base + 'tracker:' + devotionKey,
+      trackerFeed: base + 'tracker_feed:' + devotionKey,
+      devotionals: base + 'devotionals:' + devotionKey,
+      members: base + 'members:' + membersKey,
+      users: base + 'users:' + usersKey,
+    },
+  };
 }
 
 function _rowHasContent(row) {
@@ -514,6 +671,8 @@ function _updateRow(sheet, rowIndex, data, headers) {
 
 function _invalidateCacheFor(conn) {
   _cacheRemove(conn);
+  _clearMembersCache();
+  _bumpDataVersion('sheet_write');
 }
 
 // ──────────────────────────────────────────────
@@ -548,13 +707,8 @@ function searchDriveSheets(token, query) {
 
 function clearCache() {
   try {
-    const cache = CacheService.getScriptCache();
-    const props = PropertiesService.getScriptProperties();
-    cache.removeAll();
-    const keys = props.getKeys();
-    keys.forEach(function(key) {
-      if (key.indexOf('dt_') === 0) props.deleteProperty(key);
-    });
+    _clearAllDataCaches();
+    _bumpDataVersion('manual_clear');
     return { ok: true, message: 'Cache netwaye!' };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -805,6 +959,92 @@ function deleteDevotion(token, rowIndex) {
 // ──────────────────────────────────────────────
 // PHONE LOOKUP — chèche moun dinamik
 // ──────────────────────────────────────────────
+function _phoneLookupMetaKey(conn) {
+  return _cacheKey(conn, 'phone_lookup_meta');
+}
+
+function _phoneLookupBucketKey(conn, suffix) {
+  return _cacheKey(conn, 'phone_lookup_' + suffix);
+}
+
+function _findPhoneHeader(headers, fieldMapping) {
+  const mappedPhoneHeader = (fieldMapping && (fieldMapping.PHONE || fieldMapping.phone || fieldMapping['FULL PHONE NUMBER'] || fieldMapping['CLEAN PHONE'])) || '';
+  if (mappedPhoneHeader && headers.indexOf(mappedPhoneHeader) >= 0) return mappedPhoneHeader;
+
+  const exactPhone = headers.find(function(h) {
+    return String(h || '').trim().toUpperCase() === 'PHONE';
+  });
+  if (exactPhone) return exactPhone;
+
+  const cleanPhone = headers.find(function(h) {
+    const upper = String(h || '').trim().toUpperCase();
+    return upper.indexOf('CLEAN') >= 0 && upper.indexOf('PHONE') >= 0;
+  });
+  if (cleanPhone) return cleanPhone;
+
+  return headers.find(function(h) {
+    const upper = String(h || '').trim().toUpperCase();
+    return upper.indexOf('PHONE') >= 0 || upper.indexOf('TEL') >= 0;
+  }) || '';
+}
+
+function _buildPhoneLookupBucket(config, conn, suffix) {
+  const headers = _getCachedHeaders(conn);
+  const fieldMapping = _getFieldMapping(config, conn, 'members');
+  const phoneHeader = _findPhoneHeader(headers, fieldMapping);
+  if (!phoneHeader) return [];
+
+  const rows = _getCachedRows(conn);
+  const bucket = [];
+  for (const row of rows) {
+    const val = row[phoneHeader];
+    if (!val) continue;
+    const cleanVal = val.toString().replace(/\D/g, '').trim();
+    if (cleanVal && cleanVal.slice(-4) === suffix) {
+      bucket.push({
+        fromConn: conn.name,
+        member: row,
+        headers,
+        phoneValue: val,
+        fieldMapping,
+        cleanPhone: cleanVal,
+      });
+    }
+  }
+  return bucket;
+}
+
+function _getPhoneLookupBucket(config, conn, suffix) {
+  const bucketKey = _phoneLookupBucketKey(conn, suffix);
+  const cached = _cacheGet(bucketKey);
+  if (cached !== null) return cached;
+
+  const bucket = _buildPhoneLookupBucket(config, conn, suffix);
+  _cachePut(bucketKey, bucket);
+
+  const metaKey = _phoneLookupMetaKey(conn);
+  const meta = _cacheGet(metaKey) || { suffixes: [] };
+  if (meta.suffixes.indexOf(suffix) < 0) {
+    meta.suffixes.push(suffix);
+    _cachePut(metaKey, meta);
+  }
+  return bucket;
+}
+
+function _clearPhoneLookupCache(conn) {
+  try {
+    const metaKey = _phoneLookupMetaKey(conn);
+    const meta = _cacheGet(metaKey);
+    const keys = [metaKey];
+    if (meta && meta.suffixes && meta.suffixes.length) {
+      meta.suffixes.forEach(function(suffix) {
+        keys.push(_phoneLookupBucketKey(conn, suffix));
+      });
+    }
+    _cacheRemoveKeys(keys);
+  } catch(e) { /* ignore */ }
+}
+
 function lookupByPhone(token, phone) {
   if (!verifyToken(token)) throw new Error('Unauthorized');
   if (!phone || phone.trim() === '') {
@@ -821,38 +1061,15 @@ function lookupByPhone(token, phone) {
 
   // Chèche sèlman nan kolòn PHONE koneksyon manm yo.
   const results = [];
+  const suffix = cleanPhone.slice(-4);
 
   for (const conn of (config.connections || [])) {
     if (conn.role !== 'lookup') continue;
-    const headers = _getCachedHeaders(conn);
-    const rows = _getCachedRows(conn);
-    const fieldMapping = _getFieldMapping(config, conn, 'members');
-    const mappedPhoneHeader = fieldMapping.PHONE || fieldMapping.phone || '';
-    let phoneHeader = mappedPhoneHeader && headers.indexOf(mappedPhoneHeader) >= 0 ? mappedPhoneHeader : '';
-
-    if (!phoneHeader) {
-      for (const h of headers) {
-        if ((h || '').toString().trim().toUpperCase() === 'PHONE') {
-          phoneHeader = h;
-          break;
-        }
-      }
-    }
-    if (!phoneHeader) continue;
-
-    for (const row of rows) {
-      const val = row[phoneHeader];
-      if (val) {
-        const cleanVal = val.toString().replace(/\D/g, '').trim();
-        if (cleanVal && cleanVal.endsWith(cleanPhone)) {
-          results.push({
-            fromConn: conn.name,
-            member: row,
-            headers,
-            phoneValue: val,
-            fieldMapping,
-          });
-        }
+    const bucket = _getPhoneLookupBucket(config, conn, suffix);
+    for (const item of bucket) {
+      const cleanVal = item.cleanPhone || (item.phoneValue || '').toString().replace(/\D/g, '').trim();
+      if (cleanVal && cleanVal.endsWith(cleanPhone)) {
+        results.push(item);
       }
     }
   }
@@ -1019,6 +1236,8 @@ function getDashboardStats(token, opts) {
   const reporterCol = headers.find(h =>
     h.toUpperCase().includes('REPORTER') || h.toUpperCase().includes('FULL NAME')
   );
+  const totalDevotions = rows.length;
+  const byMonth = {};
 
   // Total members across all connections (except devotion)
   let totalMembers = 0;

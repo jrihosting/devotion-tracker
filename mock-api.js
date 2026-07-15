@@ -4,6 +4,11 @@
 // Devotion Tracker Mock API
 
 var LOCAL_TOKEN = null;
+var MOCK_DATA_VERSION = Date.now();
+
+function _mockBumpDataVersion() {
+  MOCK_DATA_VERSION = Date.now();
+}
 
 // ── Done fo (fallback si GAS pa reponn) ────────
 var MOCK_USERS = [
@@ -111,6 +116,7 @@ var _mockHandlers = {
   updateMember: function(token, connName, rowIndex, data) {
     var members = MOCK_MEMBERS;
     if (members[rowIndex]) Object.keys(data).forEach(function(k) { members[rowIndex][k] = data[k]; });
+    _mockBumpDataVersion();
     return { ok: true, message: 'Moun mete ajou!' };
   },
   searchDriveSheets: function(token, query) {
@@ -129,8 +135,35 @@ var _mockHandlers = {
     var names = tab === 'DB' ? MEMBER_FIELDS : (tab === 'USERS' ? ['_row','EMAIL','FULL NAME','CAMPUS','ROLE','PIN','Timestamp'] : MOCK_HEADERS);
     return { ok: true, columns: names.map(function(name, index) { return { name: name, index: index }; }) };
   },
-  saveFullConfig: function(token, config) { return { ok: true, message: 'Konfigirasyon anrejistre!' }; },
-  resetConfig: function(token) { return { ok: true, message: 'Konfigirasyon efase!' }; },
+  saveFullConfig: function(token, config) { _mockBumpDataVersion(); return { ok: true, message: 'Konfigirasyon anrejistre!' }; },
+  resetConfig: function(token) { _mockBumpDataVersion(); return { ok: true, message: 'Konfigirasyon efase!' }; },
+  getDataManifest: function(token) {
+    var base = 'local:' + MOCK_DATA_VERSION + ':';
+    var devotionKey = 'devotions:' + MOCK_DEVOTIONS.length;
+    var membersKey = 'members:' + MOCK_MEMBERS.length;
+    var usersKey = 'users:' + MOCK_USERS.length;
+    return {
+      ok: true,
+      cacheVersion: 'local',
+      ttlSeconds: 21600,
+      generatedAt: Date.now(),
+      dataVersion: String(MOCK_DATA_VERSION),
+      signatures: {
+        devotion: [{ role: 'devotion', key: devotionKey, lastRow: MOCK_DEVOTIONS.length + 1 }],
+        members: [{ role: 'lookup', key: membersKey, lastRow: MOCK_MEMBERS.length + 1 }],
+        users: [{ role: 'users', key: usersKey, lastRow: MOCK_USERS.length + 1 }],
+        connections: [],
+      },
+      keys: {
+        dashboard: base + 'dashboard:' + devotionKey + ':' + membersKey + ':' + usersKey,
+        tracker: base + 'tracker:' + devotionKey,
+        trackerFeed: base + 'tracker_feed:' + devotionKey,
+        devotionals: base + 'devotionals:' + devotionKey,
+        members: base + 'members:' + membersKey,
+        users: base + 'users:' + usersKey,
+      },
+    };
+  },
   getTrackerData: function(token, opts) {
     opts = opts || {};
     var rows = MOCK_DEVOTIONS;
@@ -165,10 +198,11 @@ var _mockHandlers = {
     Object.keys(row).forEach(function(k) {
       if (MOCK_HEADERS.indexOf(k) < 0) MOCK_HEADERS.push(k);
     });
+    _mockBumpDataVersion();
     return { ok: true, message: 'Devotion anrejistre avèk siksè!' };
   },
-  updateDevotion: function(token, rowIndex, entry) { return { ok: true, message: 'Devotion mete ajou!' }; },
-  deleteDevotion: function(token, rowIndex) { return { ok: true, message: 'Devotion efase!' }; },
+  updateDevotion: function(token, rowIndex, entry) { _mockBumpDataVersion(); return { ok: true, message: 'Devotion mete ajou!' }; },
+  deleteDevotion: function(token, rowIndex) { _mockBumpDataVersion(); return { ok: true, message: 'Devotion efase!' }; },
   lookupByPhone: function(token, phone) {
     var clean = (phone || '').replace(/\D/g, '').trim();
     if (clean.length < 4) return { ok: true, found: false, error: 'Tape omwen 4 chif pou chèche' };
@@ -197,15 +231,15 @@ var _mockHandlers = {
   getUsersList: function(token) {
     return { ok: true, headers: ['_row','EMAIL','FULL NAME','CAMPUS','ROLE','PIN','Timestamp'], users: MOCK_USERS.map(function(u,i) { return { _row: i + 2, EMAIL: u.email, 'FULL NAME': u.name, CAMPUS: u.campus, ROLE: u.role, PIN: u.pin, Timestamp: new Date().toISOString() }; }), connection: MOCK_CONFIG.connections[2] };
   },
-  addUser: function(token, data) { return { ok: true, message: 'Itilizatè ajoute avèk siksè!' }; },
-  updateUser: function(token, idx, data) { return { ok: true, message: 'Itilizatè mete ajou!' }; },
-  deleteUser: function(token, idx) { return { ok: true, message: 'Itilizatè efase!' }; },
+  addUser: function(token, data) { _mockBumpDataVersion(); return { ok: true, message: 'Itilizatè ajoute avèk siksè!' }; },
+  updateUser: function(token, idx, data) { _mockBumpDataVersion(); return { ok: true, message: 'Itilizatè mete ajou!' }; },
+  deleteUser: function(token, idx) { _mockBumpDataVersion(); return { ok: true, message: 'Itilizatè efase!' }; },
   googleSignIn: function() {
     var mockUser = MOCK_USERS[0];
     LOCAL_TOKEN = 'local_' + Date.now();
     return { ok: true, token: LOCAL_TOKEN, user: { email: mockUser.email, role: mockUser.role, name: mockUser.name } };
   },
-  clearCache: function() { return { ok: true, message: 'Cache netwaye!' }; },
+  clearCache: function() { _mockBumpDataVersion(); return { ok: true, message: 'Cache netwaye!' }; },
   getDriveAuthUrl: function() { return { ok: true, authorized: true }; },
   sendEmail: function(token, data) { return { ok: true, message: 'Email sent to ' + (data.to || 'unknown') }; },
 };
