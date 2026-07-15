@@ -1389,7 +1389,29 @@ function lookupCachedMemberByPhone(phone) {
   var cleanPhone = String(phone || '').replace(/\D/g, '').trim();
   if (cleanPhone.length < 4 || !STATE.members || !STATE.members.length) return null;
   var matches = [];
+  var seen = {};
   var phoneFields = ['PHONE', 'FULL PHONE NUMBER', 'HOME PHONE', 'WORK PHONE', 'CLEAN PHONE', 'Clean Phone Number'];
+
+  function norm(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  }
+
+  function memberKey(member, phoneValue) {
+    var fullName = member['FULL NAME'] || member['NAME'] || member['_ComputedName'] || member['Full Name'] || member['name'] || '';
+    if (!fullName) {
+      fullName = [member['FIRST NAME'] || member['First Name'] || '', member['LAST NAME'] || member['Last Name'] || ''].join(' ').trim();
+    }
+    return [
+      norm(phoneValue || member.PHONE || member['FULL PHONE NUMBER'] || member['CLEAN PHONE'] || member['Clean Phone Number']),
+      norm(fullName),
+      norm(member.CAMPUS || member['Campus'] || ''),
+      norm(member.EMAIL || member['WORK EMAIL'] || member['Email'] || ''),
+    ].join('|');
+  }
+
   STATE.members.forEach(function(member) {
     var phoneValue = '';
     for (var i = 0; i < phoneFields.length; i++) {
@@ -1416,6 +1438,9 @@ function lookupCachedMemberByPhone(phone) {
       }
     }
     if (phoneValue) {
+      var key = memberKey(member, phoneValue);
+      if (seen[key]) return;
+      seen[key] = true;
       matches.push({
         member: member,
         headers: STATE.memberFields || Object.keys(member),
@@ -2520,6 +2545,24 @@ function showMembersModal(res) {
   var members = Array.isArray(res.members) && res.members.length
     ? res.members
     : (res.member ? [{ member: res.member, headers: res.headers, fromConn: res.fromConn, phoneValue: res.phoneValue }] : []);
+  var seen = {};
+  members = members.filter(function(match) {
+    var m = match.member || {};
+    var phoneValue = match.phoneValue || m.PHONE || m['FULL PHONE NUMBER'] || m['CLEAN PHONE'] || '';
+    var fullName = m['FULL NAME'] || m['NAME'] || m['_ComputedName'] || m['Full Name'] || m['name'] || '';
+    if (!fullName) {
+      fullName = [(m['FIRST NAME'] || ''), (m['LAST NAME'] || '')].join(' ').trim();
+    }
+    var key = [
+      String(phoneValue || '').replace(/\D/g, '').trim().toLowerCase(),
+      String(fullName || '').trim().toLowerCase().replace(/\s+/g, ' '),
+      String(m.CAMPUS || m['Campus'] || '').trim().toLowerCase().replace(/\s+/g, ' '),
+      String(m.EMAIL || m['WORK EMAIL'] || m['Email'] || '').trim().toLowerCase().replace(/\s+/g, ' '),
+    ].join('|');
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
   var body = document.getElementById('memberSelectBody');
   body.innerHTML = '';
 

@@ -217,11 +217,23 @@ var _mockHandlers = {
   lookupByPhone: function(token, phone) {
     var clean = (phone || '').replace(/\D/g, '').trim();
     if (clean.length < 4) return { ok: true, found: false, error: 'Tape omwen 4 chif pou chèche' };
+    var seen = {};
     var matches = MOCK_MEMBERS.filter(function(m) {
       var mp = (m.PHONE || '').replace(/\D/g, '').trim();
       return mp && mp.endsWith(clean);
     }).map(function(m) {
       return { member: m, headers: MEMBER_FIELDS, fromConn: 'Members', phoneValue: m.PHONE, enriched: false };
+    }).filter(function(match) {
+      var m = match.member || {};
+      var key = [
+        String(match.phoneValue || m.PHONE || '').replace(/\D/g, '').trim().toLowerCase(),
+        String(m['FULL NAME'] || '').trim().toLowerCase().replace(/\s+/g, ' '),
+        String(m.CAMPUS || '').trim().toLowerCase().replace(/\s+/g, ' '),
+        String(m.EMAIL || '').trim().toLowerCase().replace(/\s+/g, ' '),
+      ].join('|');
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
     });
     if (matches.length) return { ok: true, found: true, members: matches, member: matches[0].member, headers: MEMBER_FIELDS, fromConn: 'Members', enriched: false };
     return { ok: true, found: false, error: 'Pa jwenn moun sa' };

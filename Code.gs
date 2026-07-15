@@ -1094,6 +1094,46 @@ function _clearPhoneLookupCache(conn) {
   } catch(e) { /* ignore */ }
 }
 
+function _lookupNorm(value) {
+  return String(value === undefined || value === null ? '' : value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function _lookupValue(member, keys) {
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    if (member && member[key] !== undefined && member[key] !== null && String(member[key]).trim() !== '') {
+      return member[key];
+    }
+  }
+  return '';
+}
+
+function _lookupMemberKey(result) {
+  const member = result.member || {};
+  const phone = _lookupNorm(result.phoneValue || _lookupValue(member, ['PHONE', 'FULL PHONE NUMBER', 'CLEAN PHONE', 'Clean Phone Number', 'phone']));
+  const name = _lookupNorm(_lookupValue(member, ['FULL NAME', 'NAME', '_ComputedName', 'Full Name', 'name']) ||
+    [ _lookupValue(member, ['FIRST NAME', 'First Name', 'first_name']),
+      _lookupValue(member, ['LAST NAME', 'Last Name', 'last_name']) ].join(' '));
+  const campus = _lookupNorm(_lookupValue(member, ['CAMPUS', 'Campus', 'campus']));
+  const email = _lookupNorm(_lookupValue(member, ['EMAIL', 'Email', 'WORK EMAIL', 'email']));
+  return [phone, name, campus, email].join('|');
+}
+
+function _dedupeLookupResults(results) {
+  const seen = {};
+  const out = [];
+  for (const result of (results || [])) {
+    const key = _lookupMemberKey(result);
+    if (seen[key]) continue;
+    seen[key] = true;
+    out.push(result);
+  }
+  return out;
+}
+
 function lookupByPhone(token, phone) {
   if (!verifyToken(token)) throw new Error('Unauthorized');
   if (!phone || phone.trim() === '') {
@@ -1122,6 +1162,8 @@ function lookupByPhone(token, phone) {
       }
     }
   }
+
+  const dedupedResults = _dedupeLookupResults(results);
 
   function enrichLookupResult(result) {
     const enriched = {};
@@ -1153,8 +1195,8 @@ function lookupByPhone(token, phone) {
     return enriched;
   }
 
-  if (results.length > 0) {
-    const members = results.map(result => ({
+  if (dedupedResults.length > 0) {
+    const members = dedupedResults.map(result => ({
       member: enrichLookupResult(result),
       headers: result.headers,
       fromConn: result.fromConn,
