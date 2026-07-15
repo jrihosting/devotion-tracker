@@ -3,3 +3,11 @@
 **/*.md
 **/.env*
 **/.gitignore
+mock-api.js
+server.js
+gas-api.js
+credentials.json
+token.json
+package.json
+package-lock.json
+assets/**

@@ -1,6 +1,6 @@
 # Devotion Tracker — Google Apps Script Web App
 
-**Sylvenson Richard | JRiSpace (jrispace.com)**
+
 
 ## Karakteristik
 

@@ -1,0 +1,19 @@
+{
+  "/Users/ing.sylvensonrichard/Projects/DevotionTrackerAppScript/LOOP_SPEC.md": {
+    "iterations": [
+      {
+        "n": 1,
+        "exitCode": 1,
+        "hash": "74bebb9181fb6ada:9975f5f88b17a43c",
+        "timestamp": "2026-07-11T17:25:39.061Z"
+      },
+      {
+        "n": 2,
+        "exitCode": 0,
+        "hash": "d0609c4cf79f05d8:cd00236250a4ea46",
+        "timestamp": "2026-07-11T17:29:45.230Z"
+      }
+    ],
+    "maxIterations": 20
+  }
+}

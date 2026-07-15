@@ -1,6 +1,6 @@
 /**
  * Devotion Tracker — Google Apps Script Web App
- * Sylvenson Richard | JRiSpace (jrispace.com)
+ * Devotion Tracker Web App
  *
  * LOOP ENGINEERING:
  *   Config Loop (setup → store → read)
@@ -17,12 +17,10 @@
 // ──────────────────────────────────────────────
 const CONFIG = {
   AUTH: {
-    SUPER_ADMIN: {
-      email: 'admin@jrispace.com',
-      pin: '1234',
-      role: 'super_admin',
-      name: 'Super Admin',
-    },
+    SUPER_ADMINS: [
+      { email: 'admin@jrispace.com', pin: '1234', role: 'super_admin', name: 'Super Admin' },
+      { email: 'tgdr.media@tabernacleofglory.net', pin: '1234', role: 'super_admin', name: 'Media Admin' },
+    ],
     PROPERTY_KEY: 'DEVOTION_TRACKER_TOKENS',
   },
   CONFIG_KEY: 'DEVOTION_APP_CONFIG',
@@ -53,15 +51,57 @@ function hasConfig() {
 function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
   const output = template.evaluate()
-    .setTitle('Devotion Tracker — JRiSpace')
+    .setTitle('Devotion Tracker')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
-    .setFaviconUrl('https://jrispace.com/favicon.ico');
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
   return output;
+}
+
+// ──────────────────────────────────────────────
+// doPost — JSON REST API pou lokal & ekstèn
+// ──────────────────────────────────────────────
+// Pèmèt dev/server lokal la rele fonksyon yo vía fetch()
+// Accepte: { action: "fonksyonNon", args: [arg1, arg2, ...] }
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action;
+    const args = data.args || [];
+    const fn = globalThis[action];
+    if (typeof fn !== 'function') {
+      return ContentService
+        .createTextOutput(JSON.stringify({ ok: false, error: 'Action inconnue: ' + action }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    // Retounen rezilta fonksyon an dirèkteman (pa plis包裹)
+    const result = fn.apply(null, args);
+    return ContentService
+      .createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 function include(file) {
   return HtmlService.createHtmlOutputFromFile(file).getContent();
+}
+
+// ── Pou Service Account (Execution API) ─────────────────
+// Rele sa a via Execution API pou jwenn yon token valid
+// San bezwen email/pin, paske Execution API deja verifye moun k ap rele a
+function getTokenForServiceAccount() {
+  const token = Utilities.getUuid();
+  const props = PropertiesService.getUserProperties();
+  props.setProperty(CONFIG.AUTH.PREFIX + token, JSON.stringify({
+    email: 'service-account@system.local',
+    role: 'super_admin',
+    name: 'Service Account',
+    timestamp: Date.now(),
+  }));
+  return { ok: true, token: token };
 }
 
 // ──────────────────────────────────────────────
@@ -71,14 +111,15 @@ function authenticate(email, pin) {
   const cleanEmail = email.toLowerCase().trim();
 
   // 1. Tcheke super admin anvan
-  const sa = CONFIG.AUTH.SUPER_ADMIN;
-  if (sa && sa.email === cleanEmail && sa.pin === pin) {
-    const token = Utilities.getUuid();
-    const props = PropertiesService.getUserProperties();
-    const tokens = JSON.parse(props.getProperty(CONFIG.AUTH.PROPERTY_KEY) || '{}');
-    tokens[token] = { email: cleanEmail, role: sa.role, name: sa.name, loginAt: new Date().toISOString() };
-    props.setProperty(CONFIG.AUTH.PROPERTY_KEY, JSON.stringify(tokens));
-    return { ok: true, token, user: { email: cleanEmail, role: sa.role, name: sa.name } };
+  for (const sa of CONFIG.AUTH.SUPER_ADMINS) {
+    if (sa.email === cleanEmail && sa.pin === pin) {
+      const token = Utilities.getUuid();
+      const props = PropertiesService.getUserProperties();
+      const tokens = JSON.parse(props.getProperty(CONFIG.AUTH.PROPERTY_KEY) || '{}');
+      tokens[token] = { email: cleanEmail, role: sa.role, name: sa.name, loginAt: new Date().toISOString() };
+      props.setProperty(CONFIG.AUTH.PROPERTY_KEY, JSON.stringify(tokens));
+      return { ok: true, token, user: { email: cleanEmail, role: sa.role, name: sa.name } };
+    }
   }
 
   // 2. Tcheke nan users sheet si config la egziste
@@ -140,6 +181,57 @@ function _findColumn(headers, names) {
   return null;
 }
 
+function googleSignIn() {
+  try {
+    const email = Session.getActiveUser().getEmail();
+    if (!email) {
+      return { ok: false, error: 'Pa ka detekte imèl Google ou. Verifye w siyen nan Google.' };
+    }
+    const cleanEmail = email.toLowerCase().trim();
+    // Tcheke si se super admin
+    for (const sa of CONFIG.AUTH.SUPER_ADMINS) {
+      if (sa.email === cleanEmail) {
+        const token = Utilities.getUuid();
+        const props = PropertiesService.getUserProperties();
+        const tokens = JSON.parse(props.getProperty(CONFIG.AUTH.PROPERTY_KEY) || '{}');
+        tokens[token] = { email: cleanEmail, role: sa.role, name: sa.name, loginAt: new Date().toISOString() };
+        props.setProperty(CONFIG.AUTH.PROPERTY_KEY, JSON.stringify(tokens));
+        return { ok: true, token, user: { email: cleanEmail, role: sa.role, name: sa.name } };
+      }
+    }
+    // Tcheke nan users sheet
+    const config = getAppConfig();
+    if (config) {
+      const usersConn = _findConnByRole(config, 'users');
+      if (usersConn) {
+        const headers = _getCachedHeaders(usersConn);
+        const rows = _getCachedRows(usersConn);
+        const emailCol = _findColumn(headers, ['EMAIL', 'COURRIEL', 'IMEL']);
+        const roleCol = _findColumn(headers, ['ROLE', 'WOL']);
+        const nameCol = _findColumn(headers, ['NAME', 'NON', 'PRENOM', 'FULL NAME', 'USERNAME']);
+        if (emailCol !== null) {
+          for (const row of rows) {
+            const rowEmail = String(row[headers[emailCol]] || '').toLowerCase().trim();
+            if (rowEmail === cleanEmail) {
+              const token = Utilities.getUuid();
+              const role = roleCol !== null ? (row[headers[roleCol]] || 'user') : 'user';
+              const name = nameCol !== null ? (row[headers[nameCol]] || cleanEmail) : cleanEmail;
+              const props = PropertiesService.getUserProperties();
+              const tokens = JSON.parse(props.getProperty(CONFIG.AUTH.PROPERTY_KEY) || '{}');
+              tokens[token] = { email: cleanEmail, role, name, loginAt: new Date().toISOString() };
+              props.setProperty(CONFIG.AUTH.PROPERTY_KEY, JSON.stringify(tokens));
+              return { ok: true, token, user: { email: cleanEmail, role, name } };
+            }
+          }
+        }
+      }
+    }
+    return { ok: false, error: 'Imèl Google sa pa rekonèt nan sistèm nan' };
+  } catch (e) {
+    return { ok: false, error: 'Erè Google Auth: ' + e.message };
+  }
+}
+
 function verifyToken(token) {
   if (!token) return null;
   const props = PropertiesService.getUserProperties();
@@ -189,7 +281,7 @@ function listSheetColumns(token, spreadsheetId, tabName) {
     const sheet = tabName ? ss.getSheetByName(tabName) : ss.getSheets()[0];
     const lastCol = sheet.getLastColumn();
     if (lastCol === 0) return { ok: true, columns: [] };
-    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    const headers = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
     return {
       ok: true,
       columns: headers.map((h, i) => ({
@@ -214,43 +306,85 @@ function getSpreadsheetName(token, spreadsheetId) {
 
 function saveFullConfig(token, config) {
   if (!verifyToken(token)) throw new Error('Unauthorized');
-  saveAppConfig(config);
-  return { ok: true, message: 'Konfigirasyon anrejistre!' };
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    saveAppConfig(config);
+    _clearMembersCache();
+    return { ok: true, message: 'Konfigirasyon anrejistre!' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function resetConfig(token) {
   if (!verifyToken(token)) throw new Error('Unauthorized');
-  const props = PropertiesService.getScriptProperties();
-  props.deleteProperty(CONFIG.CONFIG_KEY);
-  return { ok: true, message: 'Konfigirasyon efase!' };
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const props = PropertiesService.getScriptProperties();
+    props.deleteProperty(CONFIG.CONFIG_KEY);
+    _clearMembersCache();
+    return { ok: true, message: 'Konfigirasyon efase!' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ──────────────────────────────────────────────
 // CACHE LAYER — CacheService pou akselere
 // ──────────────────────────────────────────────
-const CACHE_TTL = 300; // 5 minit (pi bon pase 30s pou gwo done)
+const CACHE_TTL = 21600; // 6 hours; Apps Script CacheService max TTL
+const CACHE_VERSION = 'v5';
+const MEMBERS_CACHE_KEY = 'dt_v5_members_list'; // 6-hour cache for getMembersList result
 
 function _cacheKey(conn, kind) {
-  return `dt_${conn.spreadsheetId}_${conn.sheetTab || '_default'}_${kind}`;
+  return `dt_${CACHE_VERSION}_${conn.spreadsheetId}_${conn.sheetTab || '_default'}_${kind}`;
 }
 
 function _cacheGet(key) {
   try {
     const cache = CacheService.getScriptCache();
     const raw = cache.get(key);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const cachedValue = _readCachePayload(raw);
+      if (cachedValue !== null) return cachedValue;
+      cache.remove(key);
+    }
+
     // Retry via PropertiesService (pou gwo data)
     const props = PropertiesService.getScriptProperties();
     const fallback = props.getProperty(key);
-    if (fallback) return JSON.parse(fallback);
+    if (fallback) {
+      const fallbackValue = _readCachePayload(fallback);
+      if (fallbackValue !== null) return fallbackValue;
+      props.deleteProperty(key);
+    }
   } catch (e) { /* ignore cache errors */ }
   return null;
 }
 
+function _readCachePayload(raw) {
+  const parsed = JSON.parse(raw);
+  if (parsed && parsed.__dtCache === true) {
+    if (parsed.expiresAt && Date.now() > parsed.expiresAt) return null;
+    return parsed.data;
+  }
+  return parsed;
+}
+
 function _cachePut(key, data, ttl) {
   try {
-    const json = JSON.stringify(data);
-    const expiry = ttl || CACHE_TTL;
+    const expiry = Math.min(Number(ttl || CACHE_TTL) || CACHE_TTL, 21600);
+    const json = JSON.stringify({
+      __dtCache: true,
+      expiresAt: Date.now() + expiry * 1000,
+      data: data,
+    });
     // CacheService — rapid, limite a ~100KB
     if (json.length < 95000) {
       const cache = CacheService.getScriptCache();
@@ -265,9 +399,39 @@ function _cachePut(key, data, ttl) {
 function _cacheRemove(conn) {
   try {
     const cache = CacheService.getScriptCache();
-    cache.remove(_cacheKey(conn, 'headers'));
-    cache.remove(_cacheKey(conn, 'rows'));
+    const props = PropertiesService.getScriptProperties();
+    const keys = ['headers', 'rows', 'rows_all', 'rows_1', 'rows_25', 'rows_50', 'rows_100', 'rows_500'];
+    keys.forEach(function(kind) {
+      const key = _cacheKey(conn, kind);
+      cache.remove(key);
+      props.deleteProperty(key);
+    });
   } catch (e) { /* ignore */ }
+}
+
+function _clearMembersCache() {
+  try {
+    const cache = CacheService.getScriptCache();
+    const props = PropertiesService.getScriptProperties();
+    cache.remove(MEMBERS_CACHE_KEY);
+    cache.remove('dt_v4_members_list');
+    cache.remove('dt_v3_members_list');
+    cache.remove('dt_v2_members_list');
+    cache.remove('dt_members_list');
+    props.deleteProperty(MEMBERS_CACHE_KEY);
+    props.deleteProperty('dt_v4_members_list');
+    props.deleteProperty('dt_v3_members_list');
+    props.deleteProperty('dt_v2_members_list');
+    props.deleteProperty('dt_members_list');
+  } catch(e) { /* ignore */ }
+}
+
+function _rowHasContent(row) {
+  return row.some(cell => {
+    if (cell === null || cell === undefined) return false;
+    if (cell instanceof Date) return true;
+    return String(cell).trim() !== '';
+  });
 }
 
 // ──────────────────────────────────────────────
@@ -275,7 +439,9 @@ function _cacheRemove(conn) {
 // ──────────────────────────────────────────────
 function _openDynamicSheet(conn) {
   const ss = SpreadsheetApp.openById(conn.spreadsheetId);
-  return conn.sheetTab ? ss.getSheetByName(conn.sheetTab) : ss.getSheets()[0];
+  const sheet = conn.sheetTab ? ss.getSheetByName(conn.sheetTab) : ss.getSheets()[0];
+  if (!sheet) throw new Error('Tab ' + (conn.sheetTab || 'default') + ' pa jwenn nan spreadsheet ' + conn.spreadsheetId);
+  return sheet;
 }
 
 function _getCachedHeaders(conn) {
@@ -284,13 +450,14 @@ function _getCachedHeaders(conn) {
   if (cached) return cached;
   const sheet = _openDynamicSheet(conn);
   const maxCols = sheet.getLastColumn();
-  cached = maxCols === 0 ? [] : sheet.getRange(1, 1, 1, maxCols).getValues()[0];
+  cached = maxCols === 0 ? [] : sheet.getRange(1, 1, 1, maxCols).getDisplayValues()[0];
   _cachePut(key, cached);
   return cached;
 }
 
-function _getCachedRows(conn) {
-  const key = _cacheKey(conn, 'rows');
+function _getCachedRows(conn, maxRows) {
+  const requestedLimit = maxRows && Number(maxRows) > 0 ? Math.floor(Number(maxRows)) : 0;
+  const key = _cacheKey(conn, requestedLimit ? 'rows_' + requestedLimit : 'rows_all');
   let cached = _cacheGet(key);
   if (cached) return cached;
 
@@ -299,13 +466,16 @@ function _getCachedRows(conn) {
   const lastCol = sheet.getLastColumn();
   if (lastRow < 2) return [];
 
-  const headers = lastCol === 0 ? [] : sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  const data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  const rowCount = requestedLimit ? Math.min(lastRow - 1, requestedLimit) : (lastRow - 1);
+
+  const headers = lastCol === 0 ? [] : sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
+  const data = sheet.getRange(2, 1, rowCount, lastCol).getDisplayValues();
   const rows = data.map((row, idx) => {
+    if (!_rowHasContent(row)) return null;
     const obj = { _row: idx + 2 };
     headers.forEach((h, i) => { obj[h] = row[i]; });
     return obj;
-  });
+  }).filter(Boolean);
 
   _cachePut(key, rows);
   return rows;
@@ -315,7 +485,7 @@ function _getCachedRows(conn) {
 function _getHeaders(sheet) {
   const maxCols = sheet.getLastColumn();
   if (maxCols === 0) return [];
-  return sheet.getRange(1, 1, 1, maxCols).getValues()[0];
+  return sheet.getRange(1, 1, 1, maxCols).getDisplayValues()[0];
 }
 
 function _getAllRows(sheet) {
@@ -323,12 +493,13 @@ function _getAllRows(sheet) {
   const lastCol = sheet.getLastColumn();
   if (lastRow < 2) return [];
   const headers = _getHeaders(sheet);
-  const data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
   return data.map((row, idx) => {
+    if (!_rowHasContent(row)) return null;
     const obj = { _row: idx + 2 };
     headers.forEach((h, i) => { obj[h] = row[i]; });
     return obj;
-  });
+  }).filter(Boolean);
 }
 
 function _appendRow(sheet, data, headers) {
@@ -378,7 +549,12 @@ function searchDriveSheets(token, query) {
 function clearCache() {
   try {
     const cache = CacheService.getScriptCache();
+    const props = PropertiesService.getScriptProperties();
     cache.removeAll();
+    const keys = props.getKeys();
+    keys.forEach(function(key) {
+      if (key.indexOf('dt_') === 0) props.deleteProperty(key);
+    });
     return { ok: true, message: 'Cache netwaye!' };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -388,15 +564,6 @@ function clearCache() {
 // ──────────────────────────────────────────────
 // CHECK PERMISSIONS — fòse otorizasyon Drive
 // ──────────────────────────────────────────────
-function getDriveAuthUrl() {
-  const info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
-  const status = info.getAuthorizationStatus();
-  if (status === ScriptApp.AuthorizationStatus.REQUIRED) {
-    return { ok: false, authUrl: info.getAuthorizationUrl() };
-  }
-  return { ok: true };
-}
-
 function getDriveAuthUrl() {
   try {
     DriveApp.getRootFolder();
@@ -418,6 +585,43 @@ function _findConnByRole(config, role) {
 function _findConnByName(config, name) {
   if (!config || !config.connections) return null;
   return config.connections.find(c => c.name === name) || null;
+}
+
+function _getFieldMapping(config, conn, pageTypeFallback) {
+  if (!config.fieldMappings) return {};
+  if (conn && config.fieldMappings[conn.name]) return config.fieldMappings[conn.name];
+  if (pageTypeFallback && config.fieldMappings[pageTypeFallback]) return config.fieldMappings[pageTypeFallback];
+  return {};
+}
+
+function _mappedColumnName(fieldMapping, appField, fallback) {
+  const mapped = fieldMapping && fieldMapping[appField];
+  if (mapped !== undefined && mapped !== null && String(mapped).trim() !== '') {
+    return String(mapped).trim();
+  }
+  return fallback;
+}
+
+function _generateShortUniqueId() {
+  return Utilities.getUuid().replace(/-/g, '').substring(0, 8);
+}
+
+function _generateUniqueShortId(sheet, headers, idColumn) {
+  const existing = {};
+  const colIndex = headers.indexOf(idColumn);
+  if (colIndex >= 0 && sheet.getLastRow() >= 2) {
+    const values = sheet.getRange(2, colIndex + 1, sheet.getLastRow() - 1, 1).getDisplayValues();
+    values.forEach(row => {
+      const value = String(row[0] || '').trim();
+      if (value) existing[value] = true;
+    });
+  }
+
+  for (let i = 0; i < 25; i++) {
+    const id = _generateShortUniqueId();
+    if (!existing[id]) return id;
+  }
+  return Utilities.getUuid().replace(/-/g, '').substring(0, 12);
 }
 
 // ──────────────────────────────────────────────
@@ -483,30 +687,62 @@ function getTrackerData(token, opts) {
 // ADD DEVOTION — append sèlman
 // ──────────────────────────────────────────────
 function addDevotion(token, entry) {
-  if (!verifyToken(token)) throw new Error('Unauthorized');
-  const config = getAppConfig();
-  if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
+  const session = verifyToken(token);
+  if (!session) throw new Error('Unauthorized');
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    entry = entry || {};
+    const config = getAppConfig();
+    if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
 
-  const devotionConn = _findConnByRole(config, 'devotion');
-  if (!devotionConn) return { ok: false, error: 'Pa gen koneksyon devotion' };
+    const devotionConn = _findConnByRole(config, 'devotion');
+    if (!devotionConn) return { ok: false, error: 'Pa gen koneksyon devotion' };
 
-  const sheet = _openDynamicSheet(devotionConn);
-  const headers = _getHeaders(sheet);
+    const sheet = _openDynamicSheet(devotionConn);
+    const headers = _getHeaders(sheet);
 
-  const idCol = headers[0];
-  const lastId = sheet.getLastRow() >= 1
-    ? sheet.getRange(sheet.getLastRow(), 1).getValue()
-    : 0;
-  entry[idCol] = (parseInt(lastId) || 0) + 1;
-  entry.Timestamp = new Date().toISOString();
+    // Apply field mapping in reverse: app field → sheet column
+    var fieldMapping = _getFieldMapping(config, devotionConn, 'devotionals');
+    const uniqueIdColumn = _mappedColumnName(fieldMapping, 'UNIQUE ID', 'UNIQUE ID');
+    if (!entry['UNIQUE ID']) {
+      entry['UNIQUE ID'] = _generateUniqueShortId(sheet, headers, uniqueIdColumn);
+    }
+    if (!entry.Timestamp) {
+      entry.Timestamp = new Date().toISOString();
+    }
+    if (!entry['Reporter Name']) {
+      entry['Reporter Name'] = session.name || session.email || '';
+    }
+    if (!entry['DATE POSTED'] && !entry.DATE) {
+      entry['DATE POSTED'] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MM/dd/yyyy');
+    }
 
-  if (!entry['DATE POSTED']) {
-    entry['DATE POSTED'] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MM/dd/yyyy');
+    var sheetEntry = {};
+    for (var key in entry) {
+      if (entry.hasOwnProperty(key)) {
+        var sheetCol = _mappedColumnName(fieldMapping, key, key);
+        sheetEntry[sheetCol] = entry[key];
+      }
+    }
+
+    const idCol = headers[0];
+    if (idCol && sheetEntry[idCol] === undefined) {
+      const lastId = sheet.getLastRow() >= 1
+        ? sheet.getRange(sheet.getLastRow(), 1).getValue()
+        : 0;
+      sheetEntry[idCol] = (parseInt(lastId) || 0) + 1;
+    }
+
+    _appendRow(sheet, sheetEntry, headers);
+    _invalidateCacheFor(devotionConn);
+    _clearMembersCache();
+    return { ok: true, message: 'Devotion anrejistre avèk siksè!' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    lock.releaseLock();
   }
-
-  _appendRow(sheet, entry, headers);
-  _invalidateCacheFor(devotionConn);
-  return { ok: true, message: 'Devotion anrejistre avèk siksè!' };
 }
 
 // ──────────────────────────────────────────────
@@ -514,28 +750,56 @@ function addDevotion(token, entry) {
 // ──────────────────────────────────────────────
 function updateDevotion(token, rowIndex, entry) {
   if (!verifyToken(token)) throw new Error('Unauthorized');
-  const config = getAppConfig();
-  const devotionConn = _findConnByRole(config, 'devotion');
-  if (!devotionConn) return { ok: false, error: 'Pa gen koneksyon devotion' };
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const config = getAppConfig();
+    const devotionConn = _findConnByRole(config, 'devotion');
+    if (!devotionConn) return { ok: false, error: 'Pa gen koneksyon devotion' };
 
-  const sheet = _openDynamicSheet(devotionConn);
-  const headers = _getHeaders(sheet);
-  entry.Timestamp = new Date().toISOString();
-  _updateRow(sheet, rowIndex, entry, headers);
-  _invalidateCacheFor(devotionConn);
-  return { ok: true, message: 'Devotion mete ajou!' };
+    const sheet = _openDynamicSheet(devotionConn);
+    const headers = _getHeaders(sheet);
+
+    // Apply field mapping in reverse: app field → sheet column
+    var fieldMapping = _getFieldMapping(config, devotionConn, 'devotionals');
+    var sheetEntry = {};
+    for (var key in entry) {
+      if (entry.hasOwnProperty(key)) {
+        var sheetCol = fieldMapping[key] || key;
+        sheetEntry[sheetCol] = entry[key];
+      }
+    }
+    sheetEntry.Timestamp = new Date().toISOString();
+    _updateRow(sheet, rowIndex, sheetEntry, headers);
+    _invalidateCacheFor(devotionConn);
+    _clearMembersCache();
+    return { ok: true, message: 'Devotion mete ajou!' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function deleteDevotion(token, rowIndex) {
   if (!verifyToken(token)) throw new Error('Unauthorized');
-  const config = getAppConfig();
-  const devotionConn = _findConnByRole(config, 'devotion');
-  if (!devotionConn) return { ok: false, error: 'Pa gen koneksyon devotion' };
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const config = getAppConfig();
+    const devotionConn = _findConnByRole(config, 'devotion');
+    if (!devotionConn) return { ok: false, error: 'Pa gen koneksyon devotion' };
 
-  const sheet = _openDynamicSheet(devotionConn);
-  sheet.deleteRow(rowIndex);
-  _invalidateCacheFor(devotionConn);
-  return { ok: true, message: 'Devotion efase!' };
+    const sheet = _openDynamicSheet(devotionConn);
+    sheet.deleteRow(rowIndex);
+    _invalidateCacheFor(devotionConn);
+    _clearMembersCache();
+    return { ok: true, message: 'Devotion efase!' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ──────────────────────────────────────────────
@@ -550,92 +814,96 @@ function lookupByPhone(token, phone) {
   const config = getAppConfig();
   if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
 
-  const cleanPhone = phone.toString().replace(/[\s\-\(\)\.]/g, '').trim();
+  const cleanPhone = phone.toString().replace(/\D/g, '').trim();
+  if (cleanPhone.length < 4) {
+    return { ok: true, found: false, error: 'Tape omwen 4 chif pou chèche' };
+  }
 
-  // Chèche nan tout koneksyon ki gen MAPPINGS
+  // Chèche sèlman nan kolòn PHONE koneksyon manm yo.
   const results = [];
 
   for (const conn of (config.connections || [])) {
-    if (conn.role === 'devotion' || conn.role === 'users') continue; // Sote sheet devotion prensipal la
+    if (conn.role !== 'lookup') continue;
     const headers = _getCachedHeaders(conn);
     const rows = _getCachedRows(conn);
+    const fieldMapping = _getFieldMapping(config, conn, 'members');
+    const mappedPhoneHeader = fieldMapping.PHONE || fieldMapping.phone || '';
+    let phoneHeader = mappedPhoneHeader && headers.indexOf(mappedPhoneHeader) >= 0 ? mappedPhoneHeader : '';
 
-    const phoneCols = [];
-    headers.forEach((h, i) => {
-      const upper = h.toUpperCase();
-      if (upper.includes('PHONE') || upper.includes('TEL') || upper.includes('HP')) {
-        phoneCols.push(i);
+    if (!phoneHeader) {
+      for (const h of headers) {
+        if ((h || '').toString().trim().toUpperCase() === 'PHONE') {
+          phoneHeader = h;
+          break;
+        }
       }
-    });
+    }
+    if (!phoneHeader) continue;
 
-    // Si gen mappings, ajoute phone columns ki nan mapping yo
-    if (config.mappings) {
-      for (const mapping of config.mappings) {
-        if (mapping.fromConn === conn.name || mapping.toConn === conn.name) {
-          const mapHeaders = [mapping.fromColumn, mapping.toColumn];
-          mapHeaders.forEach(mh => {
-            const idx = headers.indexOf(mh);
-            if (idx >= 0 && !phoneCols.includes(idx)) phoneCols.push(idx);
+    for (const row of rows) {
+      const val = row[phoneHeader];
+      if (val) {
+        const cleanVal = val.toString().replace(/\D/g, '').trim();
+        if (cleanVal && cleanVal.endsWith(cleanPhone)) {
+          results.push({
+            fromConn: conn.name,
+            member: row,
+            headers,
+            phoneValue: val,
+            fieldMapping,
           });
         }
       }
     }
-
-    for (const row of rows) {
-      for (const colIdx of phoneCols) {
-        const val = row[headers[colIdx]];
-        if (val) {
-          const cleanVal = val.toString().replace(/[\s\-\(\)\.]/g, '').trim();
-          if (cleanVal === cleanPhone || cleanVal.includes(cleanPhone) || cleanPhone.includes(cleanVal)) {
-            results.push({
-              fromConn: conn.name,
-              member: row,
-              headers,
-            });
-          }
-        }
-      }
-    }
   }
 
-  // Aplike mappings si yo jwenn moun
-  if (results.length > 0 && config.mappings) {
+  function enrichLookupResult(result) {
     const enriched = {};
-    Object.assign(enriched, results[0].member);
+    Object.assign(enriched, result.member);
 
-    for (const mapping of config.mappings) {
-      // Chèche si yon moun jwenn nan either side of mapping
-      for (const result of results) {
-        if (result.fromConn === mapping.fromConn || result.fromConn === mapping.toConn) {
-          const theHeaders = result.headers;
-          if (theHeaders.includes(mapping.fromColumn)) {
-            enriched[mapping.toColumn] = result.member[mapping.fromColumn];
-          }
-          if (theHeaders.includes(mapping.toColumn)) {
-            enriched[mapping.fromColumn] = result.member[mapping.toColumn];
-          }
-        }
+    for (const appField in (result.fieldMapping || {})) {
+      const sheetColumn = result.fieldMapping[appField];
+      if (
+        sheetColumn &&
+        result.member[sheetColumn] !== undefined &&
+        (enriched[appField] === undefined || enriched[appField] === null || String(enriched[appField]).trim() === '')
+      ) {
+        enriched[appField] = result.member[sheetColumn];
       }
     }
 
-    return {
-      ok: true,
-      found: true,
-      member: enriched,
-      headers: results[0].headers,
-      fromConn: results[0].fromConn,
-      enriched: true,
-    };
+    for (const mapping of (config.mappings || [])) {
+      // Chèche si yon moun jwenn nan either side of mapping
+      if (result.fromConn === mapping.fromConn || result.fromConn === mapping.toConn) {
+        const theHeaders = result.headers;
+        if (theHeaders.includes(mapping.fromColumn)) {
+          enriched[mapping.toColumn] = result.member[mapping.fromColumn];
+        }
+        if (theHeaders.includes(mapping.toColumn)) {
+          enriched[mapping.fromColumn] = result.member[mapping.toColumn];
+        }
+      }
+    }
+    return enriched;
   }
 
   if (results.length > 0) {
+    const members = results.map(result => ({
+      member: enrichLookupResult(result),
+      headers: result.headers,
+      fromConn: result.fromConn,
+      phoneValue: result.phoneValue,
+      enriched: !!((config.mappings && config.mappings.length) || (result.fieldMapping && Object.keys(result.fieldMapping).length)),
+    }));
+
     return {
       ok: true,
       found: true,
-      member: results[0].member,
-      headers: results[0].headers,
-      fromConn: results[0].fromConn,
-      enriched: false,
+      members,
+      member: members[0].member,
+      headers: members[0].headers,
+      fromConn: members[0].fromConn,
+      enriched: members[0].enriched,
     };
   }
 
@@ -656,13 +924,25 @@ function getDevotionalsList(token) {
   const headers = _getCachedHeaders(devotionConn);
   const rows = _getCachedRows(devotionConn);
 
-  const dateCol = headers.find(h => h.toUpperCase().includes('DATE'));
+  // Apply field mapping for devotionals
+  var fieldMapping = _getFieldMapping(config, devotionConn, 'devotionals');
+  function mapField(appField, fallback) {
+    return _mappedColumnName(fieldMapping, appField, fallback);
+  }
+
+  const dateColumns = [mapField('DATE POSTED', 'DATE POSTED'), mapField('DATE', 'DATE'), mapField('date', 'DATE POSTED')];
+  const nameColumns = [mapField('FULL NAME', 'FULL NAME'), mapField('Reporter Name', 'Reporter Name'), mapField('name', 'FULL NAME')];
+  const campusMapped = mapField('CAMPUS', 'CAMPUS');
+  const ministryMapped = mapField('MINISTRY', 'MINISTRY');
+
+  const dateCol = headers.find(h => dateColumns.includes(h) || h.toUpperCase().includes('DATE'));
   const nameCol = headers.find(h =>
+    nameColumns.includes(h) ||
     h.toUpperCase().includes('FULL NAME') || h.toUpperCase().includes('REPORTER') ||
     h.toUpperCase().includes('FIRST NAME')
   ) || headers[0];
-  const campusCol = headers.find(h => h.toUpperCase().includes('CAMPUS'));
-  const ministryCol = headers.find(h => h.toUpperCase().includes('MINISTRY'));
+  const campusCol = headers.find(h => campusMapped === h || h.toUpperCase().includes('CAMPUS'));
+  const ministryCol = headers.find(h => ministryMapped === h || h.toUpperCase().includes('MINISTRY'));
 
   const devotionals = rows.map(r => {
     const dateRaw = dateCol ? r[dateCol] : null;
@@ -689,13 +969,13 @@ function getDevotionalsList(token) {
     };
   });
 
-  return { ok: true, devotionals };
+  return { ok: true, devotionals, total: devotionals.length };
 }
 
 // ──────────────────────────────────────────────
 // DASHBOARD — Stats dinamik
 // ──────────────────────────────────────────────
-function getDashboardStats(token) {
+function getDashboardStats(token, opts) {
   if (!verifyToken(token)) throw new Error('Unauthorized');
   const config = getAppConfig();
   if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
@@ -703,13 +983,37 @@ function getDashboardStats(token) {
   const devotionConn = _findConnByRole(config, 'devotion');
   if (!devotionConn) return { ok: false, error: 'Pa gen koneksyon devotion', needsSetup: true };
 
+  // Apply devotion field mapping
+  var devFieldMap = _getFieldMapping(config, devotionConn, 'devotionals');
+  function devMap(appField, fallback) {
+    return _mappedColumnName(devFieldMap, appField, fallback);
+  }
+
   const headers = _getCachedHeaders(devotionConn);
-  const rows = _getCachedRows(devotionConn);
+  let rows = _getCachedRows(devotionConn);
 
-  const totalDevotions = rows.length;
+  const dateColumns = [devMap('DATE POSTED', 'DATE POSTED'), devMap('DATE', 'DATE'), devMap('date', 'DATE POSTED')];
+  const dateCol = headers.find(h => dateColumns.includes(h) || h.toUpperCase().includes('DATE'));
 
-  const byMonth = {};
-  const dateCol = headers.find(h => h.toUpperCase().includes('DATE'));
+  // Apply date filter if provided
+  if (opts && (opts.dateFrom || opts.dateTo) && dateCol) {
+    rows = rows.filter(r => {
+      const rd = r[dateCol];
+      if (!rd) return true;
+      const d = typeof rd === 'string' ? new Date(rd) : rd;
+      if (isNaN(d.getTime())) return true;
+      const ts = d.getTime();
+      if (opts.dateFrom) {
+        const from = new Date(opts.dateFrom).getTime();
+        if (ts < from) return false;
+      }
+      if (opts.dateTo) {
+        const to = new Date(opts.dateTo + 'T23:59:59').getTime();
+        if (ts > to) return false;
+      }
+      return true;
+    });
+  }
   const campusCol = headers.find(h => h.toUpperCase().includes('CAMPUS'));
   const ministryCol = headers.find(h => h.toUpperCase().includes('MINISTRY'));
   const reporterCol = headers.find(h =>
@@ -718,11 +1022,14 @@ function getDashboardStats(token) {
 
   // Total members across all connections (except devotion)
   let totalMembers = 0;
+  let totalUsers = 0;
   for (const conn of (config.connections || [])) {
-    if (conn.role === 'devotion' || conn.role === 'users') continue;
+    if (conn.role === 'devotion') continue;
     try {
       const s = _openDynamicSheet(conn);
-      totalMembers += Math.max(0, s.getLastRow() - 1);
+      const count = Math.max(0, s.getLastRow() - 1);
+      if (conn.role === 'users') totalUsers += count;
+      else totalMembers += count;
     } catch (e) { /* skip */ }
   }
 
@@ -777,6 +1084,7 @@ function getDashboardStats(token) {
       totalDevotions,
       todayCount,
       totalMembers,
+      totalUsers,
       byMonth: _sortObjectKeys(byMonth),
       byCampus,
       byReporter: _topN(byReporter, 10),
@@ -799,42 +1107,125 @@ function _topN(obj, n) {
 }
 
 // ──────────────────────────────────────────────
-// MEMBER LIST
+// PREDEFINED FIELDS
 // ──────────────────────────────────────────────
+var MEMBER_FIELDS = [
+  'ID', 'USER ID', 'CAMPUS', 'FULL NAME', 'FIRST NAME', 'LAST NAME', 'PHONE', 'HOME PHONE', 'WORK PHONE',
+  'EMAIL', 'WORK EMAIL', 'GENDER', 'DOB', 'ADDRESS', 'CITY', 'STATE', 'ZIP CODE',
+  'COUNTRY', 'HP', 'HP Number', 'LADDER', 'ADMIN POSITION', 'SIDE', 'MINISTRY', 'OTHER MINISTRIES',
+  'OTHER CAMPUSES', 'STATUS', 'TEMPERAMENT', 'SPIRITUAL GIFT', 'LOVE LANGUAGE',
+  'PHOTO', 'MARITAL STATUS', 'PROFILE LINK', 'EDUCATION', 'PROFESSION', 'CAMPUS TYPE',
+  'TRAINING', 'LEVEL', 'CLEAN PHONE', 'INTEGRATION DATE', '_ComputedName', 'LadderID',
+  'Default Image', 'LEADERSHIP LADDER', 'LADDER VIEW FILTERING', 'Volunteers',
+  'IS BAPTIZED', 'BAPTISM DATE', 'IS GRADUATED', 'GRADUATION DATE', 'GATE',
+];
+
+// ──────────────────────────────────────────────
+// MEMBER LIST — predefined fields
+// ──────────────────────────────────────────────
+var DEMO_MEMBERS = [
+  { conn:"Members", ID:"1", CAMPUS:"Delmas", "FIRST NAME":"Jean", "LAST NAME":"Pierre", PHONE:"+509 34 56 7890", "HOME PHONE":"", "WORK PHONE":"", EMAIL:"jean.pierre@email.com", "WORK EMAIL":"", GENDER:"M", DOB:"15/03/1990", ADDRESS:"15 Rue Capois", CITY:"Port-au-Prince", STATE:"Ouest", "ZIP CODE":"HT6110", COUNTRY:"Haïti", HP:"", LADDER:"1", "ADMIN POSITION":"", SIDE:"", MINISTRY:"Louange", "OTHER MINISTRIES":"", "OTHER CAMPUSES":"", STATUS:"Actif", TEMPERAMENT:"Sanguin", "SPIRITUAL GIFT":"Enseignement", "LOVE LANGUAGE":"Service", PHOTO:"", "MARITAL STATUS":"Marié(e)", "PROFILE LINK":"", EDUCATION:"Université", PROFESSION:"Enseignant", "CAMPUS TYPE":"Principal", TRAINING:"Niveau 1", LEVEL:"Membre", "CLEAN PHONE":"50934567890", "INTEGRATION DATE":"01/01/2024", _ComputedName:"Pierre Jean", LadderID:"L001", "Default Image":"", "LEADERSHIP LADDER":"", "LADDER VIEW FILTERING":"", Volunteers:"", "IS BAPTIZED":"Oui", "BAPTISM DATE":"15/06/2005", "IS GRADUATED":"Oui", "GRADUATION DATE":"15/06/2023", GATE:"Porte 1" },
+  { conn:"Members", ID:"2", CAMPUS:"Pétion-Ville", "FIRST NAME":"Marie", "LAST NAME":"Joseph", PHONE:"+509 37 89 0123", "HOME PHONE":"+509 22 33 4455", "WORK PHONE":"", EMAIL:"marie.joseph@email.com", "WORK EMAIL":"mj@travail.com", GENDER:"F", DOB:"22/08/1985", ADDRESS:"38 Rue Darguin", CITY:"Pétion-Ville", STATE:"Ouest", "ZIP CODE":"HT6140", COUNTRY:"Haïti", HP:"", LADDER:"2", "ADMIN POSITION":"Secrétaire", SIDE:"Droite", MINISTRY:"Jeunesse", "OTHER MINISTRIES":"Enfants", "OTHER CAMPUSES":"Delmas", STATUS:"Actif", TEMPERAMENT:"Colérique", "SPIRITUAL GIFT":"Intercession", "LOVE LANGUAGE":"Paroles", PHOTO:"", "MARITAL STATUS":"Célibataire", "PROFILE LINK":"https://facebook.com/marie", EDUCATION:"Master", PROFESSION:"Avocat", "CAMPUS TYPE":"Principal", TRAINING:"Niveau 2", LEVEL:"Leader", "CLEAN PHONE":"50937890123", "INTEGRATION DATE":"15/03/2023", _ComputedName:"Joseph Marie", LadderID:"L002", "Default Image":"", "LEADERSHIP LADDER":"", "LADDER VIEW FILTERING":"", Volunteers:"Oui", "IS BAPTIZED":"Oui", "BAPTISM DATE":"10/12/1998", "IS GRADUATED":"Oui", "GRADUATION DATE":"20/08/2024", GATE:"Porte 2" },
+  { conn:"Members", ID:"3", CAMPUS:"Tabarre", "FIRST NAME":"Paul", "LAST NAME":"Dorsainvil", PHONE:"+509 31 45 6789", "HOME PHONE":"", "WORK PHONE":"+509 29 87 6543", EMAIL:"paul.dorsainvil@email.com", "WORK EMAIL":"", GENDER:"M", DOB:"10/11/1992", ADDRESS:"5 Avenue Lamartinière", CITY:"Tabarre", STATE:"Ouest", "ZIP CODE":"HT6120", COUNTRY:"Haïti", HP:"", LADDER:"3", "ADMIN POSITION":"Trésorier", SIDE:"Gauche", MINISTRY:"Finances", "OTHER MINISTRIES":"Administration", "OTHER CAMPUSES":"", STATUS:"Actif", TEMPERAMENT:"Mélancolique", "SPIRITUAL GIFT":"Administration", "LOVE LANGUAGE":"Temps", PHOTO:"", "MARITAL STATUS":"Marié(e)", "PROFILE LINK":"", EDUCATION:"BAC+5", PROFESSION:"Comptable", "CAMPUS TYPE":"Principal", TRAINING:"Niveau 3", LEVEL:"Leader", "CLEAN PHONE":"50931456789", "INTEGRATION DATE":"01/09/2022", _ComputedName:"Dorsainvil Paul", LadderID:"L003", "Default Image":"", "LEADERSHIP LADDER":"", "LADDER VIEW FILTERING":"", Volunteers:"", "IS BAPTIZED":"Non", "BAPTISM DATE":"", "IS GRADUATED":"Non", "GRADUATION DATE":"", GATE:"Porte 3" },
+];
+
 function getMembersList(token) {
-  if (!verifyToken(token)) throw new Error('Unauthorized');
-  const config = getAppConfig();
-  if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
+  var START = Date.now();
+  var MAX_EXECUTION_MS = 330000; // leave a little room under Apps Script's execution ceiling
+  try {
+    if (!verifyToken(token)) throw new Error('Unauthorized');
 
-  const allMembers = [];
+    // Check cache first
+    var cached = _cacheGet(MEMBERS_CACHE_KEY);
+    if (cached) return cached;
 
-  for (const conn of (config.connections || [])) {
-    if (conn.role === 'devotion' || conn.role === 'users') continue;
-    try {
-      const headers = _getCachedHeaders(conn);
-      const rows = _getCachedRows(conn);
+    const config = getAppConfig();
+    if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
 
-      const nameCol = headers.find(h =>
-        h.toUpperCase().includes('FULL NAME') || h.toUpperCase().includes('_COMPUTED') ||
-        h.toUpperCase().includes('FIRST NAME') || h.toUpperCase().includes('NAME')
-      ) || headers[0];
+    var realMembers = [];
+    var ABORTED = false;
 
-      const phoneCol = headers.find(h =>
-        h.toUpperCase().includes('PHONE NUMBER') || h.toUpperCase().includes('PHONE') ||
-        h.toUpperCase().includes('TEL')
-      );
+    for (var ci = 0; ci < (config.connections || []).length; ci++) {
+      if (Date.now() - START > MAX_EXECUTION_MS) { ABORTED = true; break; }
+      var conn = config.connections[ci];
+      if (conn.role === 'devotion' || conn.role === 'users') continue;
+      try {
+        var headers = _getCachedHeaders(conn);
+        var rows = _getCachedRows(conn);
+        if (!rows || rows.length === 0) continue;
 
-      rows.forEach(r => {
-        allMembers.push({
-          name: nameCol ? r[nameCol] : '',
-          phone: phoneCol ? r[phoneCol] : '',
-          conn: conn.name,
-        });
-      });
-    } catch (e) { /* skip problematic connections */ }
+        var fieldMapping = _getFieldMapping(config, conn, 'members');
+
+        for (var ri = 0; ri < rows.length; ri++) {
+          if (Date.now() - START > MAX_EXECUTION_MS) { ABORTED = true; break; }
+          var r = rows[ri];
+          var entry = { conn: conn.name };
+          for (var fi = 0; fi < MEMBER_FIELDS.length; fi++) {
+            var f = MEMBER_FIELDS[fi];
+            var sheetColumn = fieldMapping[f] || f;
+            entry[f] = r && r[sheetColumn] !== undefined ? r[sheetColumn] : '';
+          }
+          realMembers.push(entry);
+        }
+      } catch (e) { /* skip connection error */ }
+    }
+
+    var members = (realMembers.length > 0) ? realMembers : DEMO_MEMBERS;
+    var result = { ok: true, members: members, fields: MEMBER_FIELDS, total: members.length, isDemo: realMembers.length === 0, aborted: ABORTED };
+    // Fòse serializasyon JSON pou evite GAS V8 silent null
+    result = JSON.parse(JSON.stringify(result));
+
+    _cachePut(MEMBERS_CACHE_KEY, result);
+
+    return result;
+  } catch (e) {
+    return { ok: false, error: 'getMembersList: ' + e.message };
   }
+}
 
-  return { ok: true, members: allMembers };
+function updateMember(token, connName, rowIndex, data) {
+  if (!verifyToken(token)) throw new Error('Unauthorized');
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const config = getAppConfig();
+    const conn = _findConnByName(config, connName);
+    if (!conn) return { ok: false, error: 'Pa jwenn koneksyon' };
+    const sheet = _openDynamicSheet(conn);
+    const headers = _getHeaders(sheet);
+
+    // Apply field mapping in reverse: translate app field names → sheet column names
+    var fieldMapping = _getFieldMapping(config, conn, 'members');
+    var sheetData = {};
+    // Build reverse mapping: sheet column → app field
+    var reverseMap = {};
+    for (var appField in fieldMapping) {
+      reverseMap[fieldMapping[appField]] = appField;
+    }
+    // Now map data keys from app field names to sheet column names
+    for (var key in data) {
+      if (data.hasOwnProperty(key)) {
+        var sheetCol = fieldMapping[key] || key;
+        sheetData[sheetCol] = data[key];
+      }
+    }
+
+    _updateRow(sheet, rowIndex, sheetData, headers);
+    _invalidateCacheFor(conn);
+    _clearMembersCache();
+    return { ok: true, message: 'Moun mete ajou!' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _findConnByName(config, name) {
+  for (var i = 0; i < (config.connections || []).length; i++) {
+    if (config.connections[i].name === name) return config.connections[i];
+  }
+  return null;
 }
 
 // ──────────────────────────────────────────────
@@ -889,31 +1280,39 @@ function addUser(token, userData) {
   if (session.role !== 'admin' && session.role !== 'super_admin') {
     return { ok: false, error: 'Se admin sèlman ka ajoute itilizatè' };
   }
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const config = getAppConfig();
+    const usersConn = _findConnByRole(config, 'users');
+    if (!usersConn) return { ok: false, error: 'Pa gen users sheet' };
 
-  const config = getAppConfig();
-  const usersConn = _findConnByRole(config, 'users');
-  if (!usersConn) return { ok: false, error: 'Pa gen users sheet' };
+    const sheet = _openDynamicSheet(usersConn);
+    const headers = _getHeaders(sheet);
 
-  const sheet = _openDynamicSheet(usersConn);
-  const headers = _getHeaders(sheet);
-
-  // Verifye si email la deja egziste
-  const rows = _getCachedRows(usersConn);
-  const emailCol = headers.find(h =>
-    h.toUpperCase().includes('EMAIL') || h.toUpperCase().includes('COURRIEL') || h.toUpperCase().includes('IMEL')
-  );
-  if (emailCol) {
-    for (const row of rows) {
-      if (String(row[emailCol] || '').toLowerCase().trim() === (userData.email || '').toLowerCase().trim()) {
-        return { ok: false, error: 'Imèl sa deja egziste nan sistèm nan' };
+    // Verifye si email la deja egziste
+    const rows = _getCachedRows(usersConn);
+    const emailCol = headers.find(h =>
+      h.toUpperCase().includes('EMAIL') || h.toUpperCase().includes('COURRIEL') || h.toUpperCase().includes('IMEL')
+    );
+    if (emailCol) {
+      for (const row of rows) {
+        if (String(row[emailCol] || '').toLowerCase().trim() === (userData.email || '').toLowerCase().trim()) {
+          return { ok: false, error: 'Imèl sa deja egziste nan sistèm nan' };
+        }
       }
     }
-  }
 
-  userData.Timestamp = new Date().toISOString();
-  _appendRow(sheet, userData, headers);
-  _invalidateCacheFor(usersConn);
-  return { ok: true, message: 'Itilizatè ajoute avèk siksè!' };
+    userData.Timestamp = new Date().toISOString();
+    _appendRow(sheet, userData, headers);
+    _invalidateCacheFor(usersConn);
+    _clearMembersCache();
+    return { ok: true, message: 'Itilizatè ajoute avèk siksè!' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function updateUser(token, rowIndex, userData) {
@@ -922,18 +1321,26 @@ function updateUser(token, rowIndex, userData) {
   if (session.role !== 'admin' && session.role !== 'super_admin') {
     return { ok: false, error: 'Se admin sèlman ka modifye itilizatè' };
   }
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const config = getAppConfig();
+    const usersConn = _findConnByRole(config, 'users');
+    if (!usersConn) return { ok: false, error: 'Pa gen users sheet' };
 
-  const config = getAppConfig();
-  const usersConn = _findConnByRole(config, 'users');
-  if (!usersConn) return { ok: false, error: 'Pa gen users sheet' };
+    const sheet = _openDynamicSheet(usersConn);
+    const headers = _getHeaders(sheet);
 
-  const sheet = _openDynamicSheet(usersConn);
-  const headers = _getHeaders(sheet);
-
-  userData.Timestamp = new Date().toISOString();
-  _updateRow(sheet, rowIndex, userData, headers);
-  _invalidateCacheFor(usersConn);
-  return { ok: true, message: 'Itilizatè mete ajou!' };
+    userData.Timestamp = new Date().toISOString();
+    _updateRow(sheet, rowIndex, userData, headers);
+    _invalidateCacheFor(usersConn);
+    _clearMembersCache();
+    return { ok: true, message: 'Itilizatè mete ajou!' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function deleteUser(token, rowIndex) {
@@ -942,13 +1349,44 @@ function deleteUser(token, rowIndex) {
   if (session.role !== 'admin' && session.role !== 'super_admin') {
     return { ok: false, error: 'Se admin sèlman ka efase itilizatè' };
   }
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const config = getAppConfig();
+    const usersConn = _findConnByRole(config, 'users');
+    if (!usersConn) return { ok: false, error: 'Pa gen users sheet' };
 
-  const config = getAppConfig();
-  const usersConn = _findConnByRole(config, 'users');
-  if (!usersConn) return { ok: false, error: 'Pa gen users sheet' };
+    const sheet = _openDynamicSheet(usersConn);
+    sheet.deleteRow(rowIndex);
+    _invalidateCacheFor(usersConn);
+    _clearMembersCache();
+    return { ok: true, message: 'Itilizatè efase!' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
 
-  const sheet = _openDynamicSheet(usersConn);
-  sheet.deleteRow(rowIndex);
-  _invalidateCacheFor(usersConn);
-  return { ok: true, message: 'Itilizatè efase!' };
+// ═══════════════════════════════════════════
+// DIAGNOSTIC — tès rapid pou verifye GAS
+// ═══════════════════════════════════════════
+function ping() {
+  return { ok: true, message: 'pong', time: new Date().toISOString() };
+}
+
+function testGetMembersList(token) {
+  try {
+    var config = getAppConfig();
+    if (!config) return { ok: false, error: 'Pa gen config', needsSetup: true };
+    var members = [];
+    for (var ci = 0; ci < (config.connections || []).length; ci++) {
+      var conn = config.connections[ci];
+      if (conn.role === 'devotion' || conn.role === 'users') continue;
+      members.push({ name: conn.name, role: conn.role, spreadsheetId: conn.spreadsheetId ? conn.spreadsheetId.substring(0,10)+'...' : 'N/A', sheetTab: conn.sheetTab || 'default' });
+    }
+    return { ok: true, memberConnections: members, totalConnections: (config.connections || []).length };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 }

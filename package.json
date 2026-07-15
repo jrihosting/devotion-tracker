@@ -1,0 +1,11 @@
+{
+  "name": "devotion-tracker-local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Devotion Tracker — Local dev server",
+  "author": "Devotion Tracker",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "googleapis": "^144.0.0"
+  }
+}
