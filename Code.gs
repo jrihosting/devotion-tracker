@@ -313,7 +313,6 @@ function saveFullConfig(token, config) {
     saveAppConfig(config);
     _clearConfiguredCaches(oldConfig);
     _clearConfiguredCaches(config);
-    _clearMembersCache();
     _bumpDataVersion('config');
     return { ok: true, message: 'Konfigirasyon anrejistre!' };
   } catch (e) {
@@ -332,7 +331,6 @@ function resetConfig(token) {
     const props = PropertiesService.getScriptProperties();
     props.deleteProperty(CONFIG.CONFIG_KEY);
     _clearConfiguredCaches(oldConfig);
-    _clearMembersCache();
     _bumpDataVersion('config_reset');
     return { ok: true, message: 'Konfigirasyon efase!' };
   } catch (e) {
@@ -664,6 +662,16 @@ function _appendRow(sheet, data, headers) {
   sheet.appendRow(row);
 }
 
+function _appendRows(sheet, rows, headers) {
+  if (!rows || !rows.length) return;
+  const values = rows.map(function(data) {
+    return headers.map(function(h) {
+      return data[h] !== undefined ? data[h] : '';
+    });
+  });
+  sheet.getRange(sheet.getLastRow() + 1, 1, values.length, headers.length).setValues(values);
+}
+
 function _updateRow(sheet, rowIndex, data, headers) {
   const values = headers.map(h => data[h] !== undefined ? data[h] : '');
   sheet.getRange(rowIndex, 1, 1, values.length).setValues([values]);
@@ -760,7 +768,7 @@ function _generateShortUniqueId() {
   return Utilities.getUuid().replace(/-/g, '').substring(0, 8);
 }
 
-function _generateUniqueShortId(sheet, headers, idColumn) {
+function _getExistingUniqueIds(sheet, headers, idColumn) {
   const existing = {};
   const colIndex = headers.indexOf(idColumn);
   if (colIndex >= 0 && sheet.getLastRow() >= 2) {
@@ -770,12 +778,24 @@ function _generateUniqueShortId(sheet, headers, idColumn) {
       if (value) existing[value] = true;
     });
   }
+  return existing;
+}
 
+function _generateUniqueShortIdFromMap(existing) {
   for (let i = 0; i < 25; i++) {
     const id = _generateShortUniqueId();
-    if (!existing[id]) return id;
+    if (!existing[id]) {
+      existing[id] = true;
+      return id;
+    }
   }
-  return Utilities.getUuid().replace(/-/g, '').substring(0, 12);
+  const fallback = Utilities.getUuid().replace(/-/g, '').substring(0, 12);
+  existing[fallback] = true;
+  return fallback;
+}
+
+function _generateUniqueShortId(sheet, headers, idColumn) {
+  return _generateUniqueShortIdFromMap(_getExistingUniqueIds(sheet, headers, idColumn));
 }
 
 // ──────────────────────────────────────────────
@@ -840,13 +860,56 @@ function getTrackerData(token, opts) {
 // ──────────────────────────────────────────────
 // ADD DEVOTION — append sèlman
 // ──────────────────────────────────────────────
-function addDevotion(token, entry) {
+function _buildDevotionSheetEntry(session, sheet, headers, fieldMapping, entry, existingUniqueIds, numericIdState) {
+  entry = entry || {};
+  const uniqueIdColumn = _mappedColumnName(fieldMapping, 'UNIQUE ID', 'UNIQUE ID');
+  if (!entry['UNIQUE ID']) {
+    entry['UNIQUE ID'] = _generateUniqueShortIdFromMap(existingUniqueIds);
+  }
+  if (!entry.Timestamp) {
+    entry.Timestamp = new Date().toISOString();
+  }
+  if (!entry['Reporter Name']) {
+    entry['Reporter Name'] = session.name || session.email || '';
+  }
+  if (!entry['DATE POSTED'] && !entry.DATE) {
+    entry['DATE POSTED'] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MM/dd/yyyy');
+  }
+
+  var sheetEntry = {};
+  for (var key in entry) {
+    if (entry.hasOwnProperty(key)) {
+      var sheetCol = _mappedColumnName(fieldMapping, key, key);
+      sheetEntry[sheetCol] = entry[key];
+    }
+  }
+
+  const idCol = headers[0];
+  if (idCol && sheetEntry[idCol] === undefined) {
+    if (!numericIdState.ready) {
+      const lastId = sheet.getLastRow() >= 1
+        ? sheet.getRange(sheet.getLastRow(), 1).getValue()
+        : 0;
+      numericIdState.next = (parseInt(lastId, 10) || 0) + 1;
+      numericIdState.ready = true;
+    }
+    sheetEntry[idCol] = numericIdState.next++;
+  }
+
+  return sheetEntry;
+}
+
+function _saveDevotionEntries(token, entries, singleMessage) {
   const session = verifyToken(token);
   if (!session) throw new Error('Unauthorized');
+  entries = (Array.isArray(entries) ? entries : [entries]).filter(function(entry) { return entry && typeof entry === 'object'; });
+  if (!entries.length) return { ok: false, error: 'Pa gen devotion pou anrejistre' };
+
   var lock = LockService.getScriptLock();
+  var locked = false;
   try {
     lock.waitLock(10000);
-    entry = entry || {};
+    locked = true;
     const config = getAppConfig();
     if (!config) return { ok: false, error: 'Pa gen konfigirasyon', needsSetup: true };
 
@@ -859,44 +922,32 @@ function addDevotion(token, entry) {
     // Apply field mapping in reverse: app field → sheet column
     var fieldMapping = _getFieldMapping(config, devotionConn, 'devotionals');
     const uniqueIdColumn = _mappedColumnName(fieldMapping, 'UNIQUE ID', 'UNIQUE ID');
-    if (!entry['UNIQUE ID']) {
-      entry['UNIQUE ID'] = _generateUniqueShortId(sheet, headers, uniqueIdColumn);
-    }
-    if (!entry.Timestamp) {
-      entry.Timestamp = new Date().toISOString();
-    }
-    if (!entry['Reporter Name']) {
-      entry['Reporter Name'] = session.name || session.email || '';
-    }
-    if (!entry['DATE POSTED'] && !entry.DATE) {
-      entry['DATE POSTED'] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MM/dd/yyyy');
-    }
+    const existingUniqueIds = _getExistingUniqueIds(sheet, headers, uniqueIdColumn);
+    const numericIdState = { ready: false, next: 0 };
+    const sheetEntries = entries.map(function(entry) {
+      return _buildDevotionSheetEntry(session, sheet, headers, fieldMapping, entry, existingUniqueIds, numericIdState);
+    });
 
-    var sheetEntry = {};
-    for (var key in entry) {
-      if (entry.hasOwnProperty(key)) {
-        var sheetCol = _mappedColumnName(fieldMapping, key, key);
-        sheetEntry[sheetCol] = entry[key];
-      }
-    }
-
-    const idCol = headers[0];
-    if (idCol && sheetEntry[idCol] === undefined) {
-      const lastId = sheet.getLastRow() >= 1
-        ? sheet.getRange(sheet.getLastRow(), 1).getValue()
-        : 0;
-      sheetEntry[idCol] = (parseInt(lastId) || 0) + 1;
-    }
-
-    _appendRow(sheet, sheetEntry, headers);
+    _appendRows(sheet, sheetEntries, headers);
     _invalidateCacheFor(devotionConn);
-    _clearMembersCache();
-    return { ok: true, message: 'Devotion anrejistre avèk siksè!' };
+    return {
+      ok: true,
+      count: sheetEntries.length,
+      message: singleMessage || (sheetEntries.length + ' devotion(s) anrejistre avèk siksè!'),
+    };
   } catch (e) {
     return { ok: false, error: e.message };
   } finally {
-    lock.releaseLock();
+    if (locked) lock.releaseLock();
   }
+}
+
+function addDevotion(token, entry) {
+  return _saveDevotionEntries(token, [entry], 'Devotion anrejistre avèk siksè!');
+}
+
+function addDevotions(token, entries) {
+  return _saveDevotionEntries(token, entries, '');
 }
 
 // ──────────────────────────────────────────────
@@ -926,7 +977,6 @@ function updateDevotion(token, rowIndex, entry) {
     sheetEntry.Timestamp = new Date().toISOString();
     _updateRow(sheet, rowIndex, sheetEntry, headers);
     _invalidateCacheFor(devotionConn);
-    _clearMembersCache();
     return { ok: true, message: 'Devotion mete ajou!' };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -947,7 +997,6 @@ function deleteDevotion(token, rowIndex) {
     const sheet = _openDynamicSheet(devotionConn);
     sheet.deleteRow(rowIndex);
     _invalidateCacheFor(devotionConn);
-    _clearMembersCache();
     return { ok: true, message: 'Devotion efase!' };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -1431,7 +1480,6 @@ function updateMember(token, connName, rowIndex, data) {
 
     _updateRow(sheet, rowIndex, sheetData, headers);
     _invalidateCacheFor(conn);
-    _clearMembersCache();
     return { ok: true, message: 'Moun mete ajou!' };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -1525,7 +1573,6 @@ function addUser(token, userData) {
     userData.Timestamp = new Date().toISOString();
     _appendRow(sheet, userData, headers);
     _invalidateCacheFor(usersConn);
-    _clearMembersCache();
     return { ok: true, message: 'Itilizatè ajoute avèk siksè!' };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -1553,7 +1600,6 @@ function updateUser(token, rowIndex, userData) {
     userData.Timestamp = new Date().toISOString();
     _updateRow(sheet, rowIndex, userData, headers);
     _invalidateCacheFor(usersConn);
-    _clearMembersCache();
     return { ok: true, message: 'Itilizatè mete ajou!' };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -1578,7 +1624,6 @@ function deleteUser(token, rowIndex) {
     const sheet = _openDynamicSheet(usersConn);
     sheet.deleteRow(rowIndex);
     _invalidateCacheFor(usersConn);
-    _clearMembersCache();
     return { ok: true, message: 'Itilizatè efase!' };
   } catch (e) {
     return { ok: false, error: e.message };

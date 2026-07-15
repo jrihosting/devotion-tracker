@@ -2680,13 +2680,16 @@ function trackerSubmit() {
   }
 
   var dateStrs = dates.map(function(d) { return flatpickr.formatDate(d, 'm/d/Y'); });
+  var entries = dateStrs.map(function(dateStr) {
+    return buildTrackerDevotionData(TRACKER_SELECTED_MEMBER, dateStr);
+  });
 
-  var submitted = 0;
-  function submitNext(i) {
-    if (i >= dateStrs.length) {
+  google.script.run
+    .withSuccessHandler(function(res) {
       btn.disabled = false;
       btn.textContent = '💾 Anrejistre';
-      if (submitted > 0) {
+      if (res && res.ok) {
+        var submitted = res.count || entries.length;
         showTrackerResult(submitted + ' devotion(s) anrejistre!', 'success');
         if (window._trackerFp) window._trackerFp.clear();
         document.getElementById('trackerSelectedDates').innerHTML = '';
@@ -2696,20 +2699,16 @@ function trackerSubmit() {
         document.getElementById('trackerPhone').value = '';
         clearLocalDataCache(['dashboard', 'devotionals', 'tracker', 'trackerFeed', 'members']);
         loadFeedRecords();
+      } else {
+        showTrackerResult((res && res.error) || 'Erè', 'error');
       }
-      return;
-    }
-    var rowData = buildTrackerDevotionData(TRACKER_SELECTED_MEMBER, dateStrs[i]);
-    google.script.run
-      .withSuccessHandler(function(res) {
-        if (res.ok) { submitted++; }
-        else { showTrackerResult(res.error || 'Erè', 'error'); }
-        submitNext(i + 1);
-      })
-      .withFailureHandler(function(err) { showTrackerResult('Erè: ' + err.message, 'error'); submitNext(i + 1); })
-      .addDevotion(STATE.token, rowData);
-  }
-  submitNext(0);
+    })
+    .withFailureHandler(function(err) {
+      btn.disabled = false;
+      btn.textContent = '💾 Anrejistre';
+      showTrackerResult('Erè: ' + err.message, 'error');
+    })
+    .addDevotions(STATE.token, entries);
 }
 
 // Keep sortBy for the devotionals page
@@ -2915,45 +2914,30 @@ function saveDevotion(rowIndex) {
     }
     if (dates.length === 0) { toast('Chwazi omwen yon dat', 'error'); return; }
 
-    var pending = dates.length;
-    var errors = [];
-    var successCount = 0;
-
-    dates.forEach(function(dateStr) {
+    var entries = dates.map(function(dateStr) {
       var entry = {};
       for (var k in data) { if (data.hasOwnProperty(k)) entry[k] = data[k]; }
       entry['DATE POSTED'] = dateStr;
-
-      google.script.run
-        .withSuccessHandler(function(res) {
-          pending--;
-          if (res.ok) { successCount++; }
-          else { errors.push((res.error || 'Erè') + ' pou ' + dateStr); }
-          if (pending === 0) {
-            if (errors.length === 0) {
-              toast('Tout ' + successCount + ' devotions anrejistre!', 'success');
-            } else {
-              toast(successCount + ' siksè, ' + errors.length + ' erè. ' + errors.join(', '), 'error');
-            }
-            closeModal('devotionModal');
-            if (successCount > 0) clearLocalDataCache(['dashboard', 'devotionals', 'tracker', 'trackerFeed', 'members']);
-            loadTracker();
-            loadDashboard();
-          }
-        })
-        .withFailureHandler(function(err) {
-          pending--;
-          errors.push((err.message || 'Erè') + ' pou ' + dateStr);
-          if (pending === 0) {
-            toast(successCount + ' siksè, ' + errors.length + ' erè. ' + errors.join(', '), 'error');
-            closeModal('devotionModal');
-            if (successCount > 0) clearLocalDataCache(['dashboard', 'devotionals', 'tracker', 'trackerFeed', 'members']);
-            loadTracker();
-            loadDashboard();
-          }
-        })
-        .addDevotion(STATE.token, entry);
+      return entry;
     });
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.ok) {
+          var successCount = res.count || entries.length;
+          toast('Tout ' + successCount + ' devotions anrejistre!', 'success');
+          closeModal('devotionModal');
+          clearLocalDataCache(['dashboard', 'devotionals', 'tracker', 'trackerFeed', 'members']);
+          loadTracker();
+          loadDashboard();
+        } else {
+          toast((res && res.error) || 'Erè', 'error');
+        }
+      })
+      .withFailureHandler(function(err) {
+        toast('Erè: ' + err.message, 'error');
+      })
+      .addDevotions(STATE.token, entries);
   }
 }
 

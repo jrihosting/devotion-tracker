@@ -90,6 +90,25 @@ function _mockShortId() {
   return Math.random().toString(16).slice(2, 10).padEnd(8, '0');
 }
 
+function _mockAddDevotionRow(entry) {
+  entry = entry || {};
+  var row = {};
+  Object.keys(entry).forEach(function(k) { row[k] = entry[k]; });
+  row._row = MOCK_DEVOTIONS.length + 2;
+  row['UNIQUE ID'] = row['UNIQUE ID'] || _mockShortId();
+  row.Timestamp = row.Timestamp || new Date().toISOString();
+  row['Reporter Name'] = row['Reporter Name'] || 'Super Admin';
+  if (!row['DATE POSTED'] && !row.DATE) {
+    var now = new Date();
+    row['DATE POSTED'] = (now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
+  }
+  MOCK_DEVOTIONS.push(row);
+  Object.keys(row).forEach(function(k) {
+    if (MOCK_HEADERS.indexOf(k) < 0) MOCK_HEADERS.push(k);
+  });
+  return row;
+}
+
 // ── Handlers fo (fallback) ─────────────────────
 var _mockHandlers = {
   authenticate: function(email, pin) {
@@ -183,23 +202,15 @@ var _mockHandlers = {
     return { ok: true, headers: MOCK_HEADERS, rows: sliced, colMap: {}, total: total, page: page, pageSize: pageSize, connection: MOCK_CONFIG.connections[0] };
   },
   addDevotion: function(token, entry) {
-    entry = entry || {};
-    var row = {};
-    Object.keys(entry).forEach(function(k) { row[k] = entry[k]; });
-    row._row = MOCK_DEVOTIONS.length + 2;
-    row['UNIQUE ID'] = row['UNIQUE ID'] || _mockShortId();
-    row.Timestamp = row.Timestamp || new Date().toISOString();
-    row['Reporter Name'] = row['Reporter Name'] || 'Super Admin';
-    if (!row['DATE POSTED'] && !row.DATE) {
-      var now = new Date();
-      row['DATE POSTED'] = (now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
-    }
-    MOCK_DEVOTIONS.push(row);
-    Object.keys(row).forEach(function(k) {
-      if (MOCK_HEADERS.indexOf(k) < 0) MOCK_HEADERS.push(k);
-    });
+    _mockAddDevotionRow(entry);
     _mockBumpDataVersion();
     return { ok: true, message: 'Devotion anrejistre avèk siksè!' };
+  },
+  addDevotions: function(token, entries) {
+    entries = Array.isArray(entries) ? entries : [];
+    entries.forEach(function(entry) { _mockAddDevotionRow(entry); });
+    _mockBumpDataVersion();
+    return { ok: true, count: entries.length, message: entries.length + ' devotion(s) anrejistre avèk siksè!' };
   },
   updateDevotion: function(token, rowIndex, entry) { _mockBumpDataVersion(); return { ok: true, message: 'Devotion mete ajou!' }; },
   deleteDevotion: function(token, rowIndex) { _mockBumpDataVersion(); return { ok: true, message: 'Devotion efase!' }; },
